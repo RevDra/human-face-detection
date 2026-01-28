@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLOv8 Face Detection - Web</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            border: none;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="file"],
+        select {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="file"]:hover,
+        select:hover {
+            border-color: #667eea;
+        }
+
+        input[type="file"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            background: #f0f2ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.dragover {
+            background: #e8ebff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+
+        .upload-area p {
+            color: #667eea;
+            margin: 0;
+            font-weight: 500;
+        }
+
+        .file-info {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+        }
+
+        .file-name {
+            color: #2e7d32;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .file-size {
+            color: #558b2f;
+            font-size: 0.9em;
+        }
+
+        .file-preview {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 8px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        #webcam {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .webcam-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: blink 1s infinite;
+        }
+
+        .status-indicator.active {
+            background: #4caf50;
+        }
+
+        .status-indicator.inactive {
+            background: #f44336;
+            animation: none;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .progress-container {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .progress-container p {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            animation: progress-animation 2s ease-in-out infinite;
+            transition: width 0.3s ease;
+        }
+
+        @keyframes progress-animation {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+
+        .result-container {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .result-image {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .detection-stats {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .faces-list {
+            margin-top: 20px;
+        }
+
+        .face-item {
+            background: white;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .face-item strong {
+            color: #667eea;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #2e7d32;
+        }
+
+        .message.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-left: 4px solid #1565c0;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .download-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .download-link:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab-button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 YOLOv8 Face Detection</h1>
+            <p>Advanced face detection using state-of-the-art AI models</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="switchTab('image')">📷 Image Detection</button>
+            <button class="tab-button" onclick="switchTab('video')">🎬 Video Detection</button>
+            <button class="tab-button" onclick="switchTab('webcam-tab')">📹 Live Webcam</button>
+            <button class="tab-button" onclick="switchTab('info')">ℹ️ Information</button>
+        </div>
+
+        <!-- Image Tab -->
+        <div id="image" class="tab-content active">
+            <div class="card">
+                <h2>Detect Faces in Image</h2>
+                
+                <div id="imageMessage" class="message"></div>
+
+                <div class="form-group">
+                    <label for="imageModel">🤖 Select Model:</label>
+                    <select id="imageModel">
+                        <option value="yolov8l_100e.pt">YOLOv8 Large - Best Accuracy</option>
+                        <option value="yolov8m_200e.pt">YOLOv8 Medium - Balanced</option>
+                        <option value="yolov8n_100e.pt">YOLOv8 Nano - Fastest</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>📁 Upload Image:</label>
+                    <div class="upload-area" id="imageUploadArea">
+                        <input type="file" id="imageFile" accept="image/*" style="display: none;">
+                        <p>🖱️ Click to upload or drag & drop</p>
+                        <p style="font-size: 0.9em; margin-top: 5px; opacity: 0.7;">Supported: JPG, PNG, GIF</p>
+                    </div>
+                    <div class="file-info" id="imageFileInfo">
+                        <div class="file-info-item">
+                            <span class="file-name" id="imageFileName">No file selected</span>
+                        </div>
+                        <div class="file-info-item">
+                            <span class="file-size" id="imageFileSize"></span>
+                        </div>
+                        <img id="imagePreview" class="file-preview" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" id="detectImageBtn" onclick="detectImage()">
+                        🔍 Detect Faces
+                    </button>
+                    <button class="btn-secondary" onclick="clearImageForm()">🗑️ Clear</button>
+                </div>
+
+                <div class="progress-container" id="imageProgress">
+                    <p>Processing...</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="result-container" id="imageResult">
+                    <img id="resultImage" class="result-image" alt="Detection Result">
+                    <div class="detection-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">Faces Detected:</span>
+                            <span class="stat-value" id="faceCount">0</span>
+                        </div>
+                    </div>
+                    <div class="faces-list" id="facesList"></div>
+                    <button class="download-link" id="downloadImageBtn" onclick="downloadImage()" style="display: block; margin-top: 15px; width: 100%; padding: 10px;">
+                        ⬇️ Download Result Image
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Tab -->
+        <div id="video" class="tab-content">
+            <div class="card">
+                <h2>Detect Faces in Video</h2>
+                
+                <div id="videoMessage" class="message"></div>
+
+                <div class="form-group">
+                    <label for="videoModel">🤖 Select Model:</label>
+                    <select id="videoModel">
+                        <option value="yolov8m_200e.pt">YOLOv8 Medium - Balanced (Recommended)</option>
+                        <option value="yolov8l_100e.pt">YOLOv8 Large - Best Accuracy</option>
+                        <option value="yolov8n_100e.pt">YOLOv8 Nano - Fastest</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>📁 Upload Video:</label>
+                    <div class="upload-area" id="videoUploadArea">
+                        <input type="file" id="videoFile" accept="video/*" style="display: none;">
+                        <p>🖱️ Click to upload or drag & drop</p>
+                        <p style="font-size: 0.9em; margin-top: 5px; opacity: 0.7;">Supported: MP4, AVI, MOV, MKV</p>
+                    </div>
+                    <div class="file-info" id="videoFileInfo">
+                        <div class="file-info-item">
+                            <span class="file-name" id="videoFileName">No file selected</span>
+                        </div>
+                        <div class="file-info-item">
+                            <span class="file-size" id="videoFileSize"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" id="detectVideoBtn" onclick="detectVideo()">
+                        🎬 Process Video
+                    </button>
+                    <button class="btn-secondary" onclick="clearVideoForm()">🗑️ Clear</button>
+                </div>
+
+                <div class="progress-container" id="videoProgress">
+                    <p>Processing video... This may take a while</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="result-container" id="videoResult">
+                    <div class="detection-stats">
+                        <div class="stat-row">
+                            <span class="stat-label">✅ Processing Complete!</span>
+                        </div>
+                    </div>
+                    <p id="videoResultText"></p>
+                    <h3 style="color: #667eea; margin-top: 20px; margin-bottom: 15px;">🎬 Detection Output</h3>
+                    <video id="outputVideo" width="100%" height="auto" controls style="border-radius: 8px; margin-bottom: 15px; display: none;">
+                        Your browser does not support the video tag.
+                    </video>
+                    <a id="downloadLink" class="download-link" target="_blank">⬇️ Download Output Video</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Webcam Tab -->
+        <div id="webcam-tab" class="tab-content">
+            <div class="card">
+                <h2>Live Webcam Detection</h2>
+                
+                <div id="webcamMessage" class="message"></div>
+
+                <div class="form-group">
+                    <label for="webcamModel">🤖 Select Model:</label>
+                    <select id="webcamModel">
+                        <option value="yolov8n_100e.pt">YOLOv8 Nano - Fastest (Recommended)</option>
+                        <option value="yolov8m_200e.pt">YOLOv8 Medium - Balanced</option>
+                        <option value="yolov8l_100e.pt">YOLOv8 Large - Best Accuracy</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary btn-start" id="startWebcamBtn" onclick="startWebcam()">
+                        ▶️ Start Detection
+                    </button>
+                    <button class="btn-secondary btn-stop" id="stopWebcamBtn" onclick="stopWebcam()" disabled>
+                        ⏹️ Stop Detection
+                    </button>
+                </div>
+
+                <div style="display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                    <!-- Left side: Video input -->
+                    <div style="flex: 1; min-width: 320px;">
+                        <h3 style="color: #667eea; margin-bottom: 10px;">📹 Webcam Feed</h3>
+                        <div class="video-container">
+                            <video id="webcamVideo" width="100%" height="auto" playsinline autoplay style="border-radius: 8px;"></video>
+                        </div>
+                    </div>
+
+                    <!-- Right side: Detection output -->
+                    <div style="flex: 1; min-width: 320px;">
+                        <h3 style="color: #667eea; margin-bottom: 10px;">🎯 Detection Results</h3>
+                        <div class="video-container">
+                            <img id="webcamResult" style="width: 100%; border-radius: 8px; background: #222; display: none;">
+                            <p id="webcamPlaceholder" style="text-align: center; color: #999; padding: 40px; background: #222; border-radius: 8px; display: block;">Click Start Detection</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detection-stats">
+                    <div class="stat-row">
+                        <span class="stat-label">
+                            <span class="status-indicator inactive" id="statusIndicator"></span>
+                            Status
+                        </span>
+                        <span class="stat-value" id="webcamStatus">🔴 Inactive</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Faces Detected</span>
+                        <span class="stat-value" id="webcamFaces">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">FPS</span>
+                        <span class="stat-value" id="webcamFPS">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Duration</span>
+                        <span class="stat-value" id="webcamDuration">0.0s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Tab -->
+        <div id="info" class="tab-content">
+            <div class="card">
+                <h2>About YOLOv8 Models</h2>
+                
+                <div class="detection-stats">
+                    <h3 style="color: #667eea; margin-bottom: 15px;">📊 Model Comparison</h3>
+                    
+                    <div class="stat-row">
+                        <span class="stat-label"><strong>YOLOv8 Nano (yolov8n)</strong></span>
+                        <span>Fastest - 30-60 FPS</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label"><strong>YOLOv8 Medium (yolov8m)</strong></span>
+                        <span>Balanced - 15-30 FPS</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label"><strong>YOLOv8 Large (yolov8l)</strong></span>
+                        <span>Most Accurate - 5-15 FPS</span>
+                    </div>
+                </div>
+
+                <h3 style="color: #667eea; margin-top: 30px; margin-bottom: 15px;">💡 Recommendations</h3>
+                <ul style="line-height: 2; color: #666;">
+                    <li>✅ Use <strong>YOLOv8 Nano</strong> for real-time live detection</li>
+                    <li>✅ Use <strong>YOLOv8 Medium</strong> for video file processing</li>
+                    <li>✅ Use <strong>YOLOv8 Large</strong> for maximum accuracy on images</li>
+                </ul>
+
+                <h3 style="color: #667eea; margin-top: 30px; margin-bottom: 15px;">🔧 API Endpoints</h3>
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; font-family: monospace; overflow-x: auto;">
+                    <p><strong>POST</strong> /api/detect-image - Detect faces in image</p>
+                    <p><strong>POST</strong> /api/detect-video - Detect faces in video</p>
+                    <p><strong>GET</strong> /api/models - List available models</p>
+                    <p><strong>GET</strong> /api/health - Health check</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🚀 YOLOv8 Face Detection Web Interface | Powered by Flask & YOLOv8</p>
+        </div>
+    </div>
+
+    <script>
+        // Global variables for webcam
+        let webcamStream = null;
+        let webcamRunning = false;
+        let detectionInterval = null;
+        let frameCount = 0;
+        let startTime = null;
+        let isProcessing = false; // Prevent overlapping requests
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            const buttons = document.querySelectorAll('.tab-button');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Update file info display
+        function updateFileInfo(type, file) {
+            if (!file) return;
+            
+            const fileNameElement = document.getElementById(`${type}FileName`);
+            const fileSizeElement = document.getElementById(`${type}FileSize`);
+            const filePreviewElement = document.getElementById(`${type}Preview`);
+            const fileInfoDiv = document.getElementById(`${type}FileInfo`);
+            
+            // Show file info
+            if (fileNameElement) {
+                fileNameElement.textContent = `📄 ${file.name}`;
+            }
+            if (fileSizeElement) {
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                fileSizeElement.textContent = `${sizeMB} MB`;
+            }
+            
+            // Show preview for images
+            if (type === 'image' && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    filePreviewElement.src = e.target.result;
+                    filePreviewElement.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+            
+            if (fileInfoDiv) {
+                fileInfoDiv.style.display = 'block';
+            }
+        }
+
+        // Upload area drag & drop
+        function setupUploadArea(areaId, inputId) {
+            const area = document.getElementById(areaId);
+            const input = document.getElementById(inputId);
+            
+            area.addEventListener('click', () => input.click());
+            
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.classList.add('dragover');
+            });
+            
+            area.addEventListener('dragleave', () => {
+                area.classList.remove('dragover');
+            });
+            
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.classList.remove('dragover');
+                input.files = e.dataTransfer.files;
+                // Update file info
+                const type = inputId === 'imageFile' ? 'image' : 'video';
+                updateFileInfo(type, input.files[0]);
+            });
+            
+            // Handle file selection
+            input.addEventListener('change', (e) => {
+                const type = inputId === 'imageFile' ? 'image' : 'video';
+                updateFileInfo(type, e.target.files[0]);
+            });
+        }
+
+        setupUploadArea('imageUploadArea', 'imageFile');
+        setupUploadArea('videoUploadArea', 'videoFile');
+
+        // Webcam functions
+        async function startWebcam() {
+            try {
+                const webcamElement = document.getElementById('webcamVideo');
+                const startBtn = document.querySelector('#startWebcamBtn');
+                const stopBtn = document.querySelector('#stopWebcamBtn');
+                const statusIndicator = document.getElementById('webcamStatus');
+                
+                // Request camera access
+                webcamStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 },
+                    audio: false 
+                });
+                
+                webcamElement.srcObject = webcamStream;
+                webcamRunning = true;
+                isProcessing = false;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusIndicator.textContent = '🟢 Active';
+                statusIndicator.style.color = '#4CAF50';
+                
+                // Start detection loop
+                startDetectionLoop();
+                
+            } catch (error) {
+                alert('Error accessing camera: ' + error.message);
+                console.error('Camera error:', error);
+            }
+        }
+
+        function stopWebcam() {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+            }
+            
+            webcamRunning = false;
+            clearInterval(detectionInterval);
+            
+            const startBtn = document.querySelector('#startWebcamBtn');
+            const stopBtn = document.querySelector('#stopWebcamBtn');
+            const statusIndicator = document.getElementById('webcamStatus');
+            const resultImg = document.getElementById('webcamResult');
+            const placeholder = document.getElementById('webcamPlaceholder');
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            statusIndicator.textContent = '🔴 Inactive';
+            statusIndicator.style.color = '#f44336';
+            resultImg.style.display = 'none';
+            placeholder.style.display = 'block';
+            
+            // Reset stats
+            frameCount = 0;
+            startTime = null;
+            isProcessing = false;
+        }
+
+        async function startDetectionLoop() {
+            const model = document.getElementById('webcamModel').value;
+            const webcamElement = document.getElementById('webcamVideo');
+            const resultImg = document.getElementById('webcamResult');
+            const placeholder = document.getElementById('webcamPlaceholder');
+            
+            startTime = Date.now();
+            
+            detectionInterval = setInterval(async () => {
+                if (!webcamRunning || webcamElement.readyState !== webcamElement.HAVE_ENOUGH_DATA) {
+                    return;
+                }
+                
+                // Skip if still processing previous frame
+                if (isProcessing) {
+                    return;
+                }
+                
+                try {
+                    isProcessing = true;
+                    
+                    // Create canvas from video frame
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = 480; // Reduced width for faster processing
+                    tempCanvas.height = 360;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.drawImage(webcamElement, 0, 0, 480, 360);
+                    
+                    // Convert to blob and send to server
+                    tempCanvas.toBlob(async (blob) => {
+                        try {
+                            const formData = new FormData();
+                            formData.append('file', blob, 'webcam.jpg');
+                            formData.append('model', model);
+                            
+                            const response = await fetch('/api/detect-image', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if (data.success && webcamRunning) {
+                                // Update stats
+                                frameCount++;
+                                const elapsed = (Date.now() - startTime) / 1000;
+                                const fps = (frameCount / elapsed).toFixed(1);
+                                
+                                document.getElementById('webcamFaces').textContent = data.detections.count;
+                                document.getElementById('webcamFPS').textContent = fps;
+                                document.getElementById('webcamDuration').textContent = elapsed.toFixed(1) + 's';
+                                
+                                // Show result image
+                                resultImg.src = data.image;
+                                resultImg.style.display = 'block';
+                                placeholder.style.display = 'none';
+                            }
+                            isProcessing = false;
+                        } catch (error) {
+                            console.error('Detection error:', error);
+                            isProcessing = false;
+                        }
+                    }, 'image/jpeg', 0.7); // Balanced quality
+                    
+                } catch (error) {
+                    console.error('Canvas error:', error);
+                    isProcessing = false;
+                }
+            }, 150); // Process every 150ms (~6-7 FPS)
+        }
+
+        // Detect image
+        async function detectImage() {
+            const file = document.getElementById('imageFile').files[0];
+            const model = document.getElementById('imageModel').value;
+            
+            if (!file) {
+                showMessage('imageMessage', 'Please select an image', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('model', model);
+            
+            document.getElementById('detectImageBtn').disabled = true;
+            document.getElementById('imageProgress').style.display = 'block';
+            document.getElementById('imageResult').style.display = 'none';
+            showMessage('imageMessage', '', 'info');
+            
+            // Simulate progress
+            const progressFill = document.querySelector('#imageProgress .progress-fill');
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 30;
+                if (progress > 90) progress = 90;
+                progressFill.style.width = progress + '%';
+            }, 200);
+            
+            try {
+                const response = await fetch('/api/detect-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Display image
+                    document.getElementById('resultImage').src = data.image;
+                    
+                    // Display detection stats
+                    document.getElementById('faceCount').textContent = data.detections.count;
+                    
+                    // Display faces list
+                    const facesList = document.getElementById('facesList');
+                    facesList.innerHTML = '';
+                    
+                    if (data.detections.count > 0) {
+                        data.detections.faces.forEach(face => {
+                            const item = document.createElement('div');
+                            item.className = 'face-item';
+                            item.innerHTML = `
+                                <strong>Face ${face.id}</strong><br>
+                                Confidence: ${face.confidence}<br>
+                                Size: ${face.width}×${face.height}px<br>
+                                Position: ${face.position}
+                            `;
+                            facesList.appendChild(item);
+                        });
+                    } else {
+                        facesList.innerHTML = '<p style="color: #999;">No faces detected</p>';
+                    }
+                    
+                    document.getElementById('imageResult').style.display = 'block';
+                    showMessage('imageMessage', `✅ Found ${data.detections.count} face(s)!`, 'success');
+                } else {
+                    showMessage('imageMessage', `Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                clearInterval(progressInterval);
+                showMessage('imageMessage', `Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('imageProgress').style.display = 'none';
+                progressFill.style.width = '0%';
+                document.getElementById('detectImageBtn').disabled = false;
+            }
+        }
+
+        // Detect video
+        async function detectVideo() {
+            const file = document.getElementById('videoFile').files[0];
+            const model = document.getElementById('videoModel').value;
+            
+            if (!file) {
+                showMessage('videoMessage', 'Please select a video', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('model', model);
+            
+            document.getElementById('detectVideoBtn').disabled = true;
+            document.getElementById('videoProgress').style.display = 'block';
+            document.getElementById('videoResult').style.display = 'none';
+            showMessage('videoMessage', '', 'info');
+            
+            // Simulate progress
+            const progressFill = document.querySelector('#videoProgress .progress-fill');
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 20;
+                if (progress > 90) progress = 90;
+                progressFill.style.width = progress + '%';
+            }, 300);
+            
+            try {
+                const response = await fetch('/api/detect-video', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('videoResultText').innerHTML = `
+                        ✅ Video processing complete!<br>
+                        <small>Output file: ${data.output_file}</small>
+                    `;
+                    document.getElementById('downloadLink').href = data.download_url;
+                    
+                    // Display video if available
+                    const outputVideo = document.getElementById('outputVideo');
+                    outputVideo.src = data.download_url;
+                    outputVideo.style.display = 'block';
+                    
+                    document.getElementById('videoResult').style.display = 'block';
+                    showMessage('videoMessage', `✅ ${data.message}`, 'success');
+                } else {
+                    showMessage('videoMessage', `Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                clearInterval(progressInterval);
+                showMessage('videoMessage', `Error: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('videoProgress').style.display = 'none';
+                progressFill.style.width = '0%';
+                document.getElementById('detectVideoBtn').disabled = false;
+            }
+        }
+
+        // Show message
+        function showMessage(elementId, text, type) {
+            const element = document.getElementById(elementId);
+            if (text) {
+                element.textContent = text;
+                element.className = `message ${type} show`;
+            } else {
+                element.className = 'message';
+            }
+        }
+
+        // Download result image
+        function downloadImage() {
+            const resultImage = document.getElementById('resultImage');
+            const imageFile = document.getElementById('imageFile').files[0];
+            
+            if (!resultImage.src) {
+                alert('No result image available');
+                return;
+            }
+            
+            // Create a temporary link element
+            const link = document.createElement('a');
+            link.href = resultImage.src;
+            
+            // Generate filename
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const originalName = imageFile ? imageFile.name.split('.')[0] : 'detection';
+            link.download = `${originalName}_detected_${timestamp}.jpg`;
+            
+            // Trigger download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Clear forms
+        function clearImageForm() {
+            document.getElementById('imageFile').value = '';
+            document.getElementById('imageFileInfo').style.display = 'none';
+            document.getElementById('imagePreview').style.display = 'none';
+            document.getElementById('imageResult').style.display = 'none';
+            showMessage('imageMessage', '', '');
+        }
+
+        function clearVideoForm() {
+            document.getElementById('videoFile').value = '';
+            document.getElementById('videoFileInfo').style.display = 'none';
+            document.getElementById('outputVideo').style.display = 'none';
+            document.getElementById('videoResult').style.display = 'none';
+            showMessage('videoMessage', '', '');
+        }
+    </script>
+</body>
+</html>
