@@ -151,10 +151,12 @@ Edit `web_app.py` to modify:
 ## 📝 Notes
 
 ### Model Files Required
-All three model files must be in the project root:
-- `yolov8n_100e.pt` (24 MB)
-- `yolov8m_200e.pt` (203 MB)
-- `yolov8l_100e.pt` (85 MB)
+Three model files are required in the `models/` directory:
+- `yolov8n_100e.pt` (23 MB) ✅ Included
+- `yolov8m_200e.pt` (197 MB) 📥 [Download](models/MODELS.md)
+- `yolov8l_100e.pt` (83 MB) 📥 [Download](models/MODELS.md)
+
+**See [models/MODELS.md](models/MODELS.md) for detailed download instructions.**
 
 ### Performance Tips
 1. Use **YOLOv8 Nano** for webcam (fastest)
@@ -172,9 +174,9 @@ All three model files must be in the project root:
 
 ### Models Not Found
 ```
-FileNotFoundError: Model not found
+FileNotFoundError: Model not found: models/yolov8m_200e.pt
 ```
-**Solution:** Ensure yolov8*.pt files are in the project root directory
+**Solution:** Download missing models from [models/MODELS.md](models/MODELS.md). Only `yolov8n_100e.pt` is included by default.
 
 ### Camera Permission Denied
 **Solution:** Grant camera permission in browser settings or use HTTPS
@@ -190,9 +192,15 @@ FileNotFoundError: Model not found
 
 ## 📚 References
 
-- [YOLOv8 Documentation](https://docs.ultralytics.com/)
+- [Model Setup Guide](models/MODELS.md) - Download and setup instructions
+- [YOLOv8-Face Repository](https://github.com/Yusepp/YOLOv8-Face) - Original face-optimized models
+- [Ultralytics YOLOv8](https://docs.ultralytics.com/) - YOLOv8 documentation
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [OpenCV Documentation](https://docs.opencv.org/)
+
+## 🙏 Credits
+
+Special thanks to **[Yusepp](https://github.com/Yusepp)** for the [YOLOv8-Face](https://github.com/Yusepp/YOLOv8-Face) repository and the pre-trained face-optimized models used in this project.
 
 ---
 
