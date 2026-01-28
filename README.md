@@ -63,24 +63,19 @@ Human_face_detection/
 │
 ├── models/                             # YOLOv8 models
 │   ├── yolov8n_100e.pt                # YOLOv8 Nano (fastest)
-│   ├── yolov8m_200e.pt                # YOLOv8 Medium (balanced)
-│   └── yolov8l_100e.pt                # YOLOv8 Large (accurate)
+|   └── MODELS.md                      # Instruction to download YOLOv8 Medium (yolov8m_200e.pt) and Large (yolov8l_100e.pt)
 │
 ├── web/                                # Web interface
 │   └── templates/
 │       └── index.html                 # Web UI (HTML/CSS/JS)
 │
 ├── config/                             # Configuration files
-│   ├── Dockerfile                     # Docker configuration
-│   ├── docker-compose.yml             # Docker compose setup
-│   ├── deploy.sh                      # Linux deployment
-│   ├── deploy.bat                     # Windows deployment
-│   └── DEPLOYMENT_GUIDE.txt           # Deployment guide
-│
-└── data/                               # Data directory
-    ├── uploads/                       # Temporary file uploads
-    ├── samples/                       # Sample images/videos
-    └── outputs/                       # Processed results
+    ├── Dockerfile                     # Docker configuration
+    ├── docker-compose.yml             # Docker compose setup
+    ├── deploy.sh                      # Linux deployment
+    ├── deploy.bat                     # Windows deployment
+    └── DEPLOYMENT_GUIDE.txt           # Deployment guide
+
 ```
 
 ## 🔧 API Endpoints
