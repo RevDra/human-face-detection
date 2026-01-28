@@ -1,0 +1,27 @@
+# YOLOv8 Face Detection - Docker Compose Configuration
+
+version: '3.8'
+
+services:
+  face-detection-web:
+    build:
+      context: ..
+      dockerfile: config/Dockerfile
+    container_name: yolov8-face-detection
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../data/uploads:/app/data/uploads
+      - ../data/outputs:/app/data/outputs
+      - ../data/samples:/app/data/samples
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Build: docker-compose build
+# Run: docker-compose up -d
+# Stop: docker-compose down
+# View logs: docker-compose logs -f
