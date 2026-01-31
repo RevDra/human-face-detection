@@ -1,7 +1,7 @@
 # 🔍 YOLOv8 Human Face Detection Web Application
 
 A professional, real-time face detection system built with YOLOv8 and Flask. Detect faces in images, videos, and live webcam streams with high accuracy.
-View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I have modified this repository for better alignment to Hugging Face Spaces.
+View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I have modified for better alignment to Hugging Face Spaces.
 
 ## ✨ Features
 
@@ -15,7 +15,7 @@ View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I ha
 - Process video files (MP4, AVI, MOV, MKV)
 - Annotate each frame with bounding boxes
 - Download processed video
-- Watch results directly in web player
+- Watch results directly in the web player
 
 ### 📹 Live Webcam
 - Real-time detection from your webcam
@@ -200,5 +200,5 @@ Special thanks to **[Yusepp](https://github.com/Yusepp)** for the [YOLOv8-Face](
 
 ---
 
-**Last Updated:** January 28, 2026
+**Last Updated:** January 28, 2026 |
 **Status:** ✅ Production Ready
