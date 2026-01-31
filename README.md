@@ -67,8 +67,8 @@ https://localhost:7860
 Human_face_detection/
 ├── README.md                           # Main documentation
 ├── requirements.txt                    # Python dependencies
-├── LICENSE
-├── CODE_OF_CONDUCT.md
+├── LICENSE                             # AGPL v3 License
+├── CODE_OF_CONDUCT.md                  # Community guidelines
 │
 ├── src/                                # Source code
 │   ├── web_app.py                     # Flask web server
@@ -217,7 +217,7 @@ This project uses the following open-source components:
 
 2.  **Face Detection Weights** inspired by YapaLab:
     -   License: [GPL-3.0](https://github.com/YapaLab/yolo-face/blob/dev/LICENSE)
-    -   Source: [https://github.com/Yusepp/YOLOv8-Face.git](https://github.com/YapaLab/yolo-face)
+    -   Source: [https://github.com/YapaLab/yolo-face](https://github.com/YapaLab/yolo-face)
       
 **Project License:**
 This entire project is licensed under the AGPL-3.0 to comply with the licensing terms of the YOLO ecosystem.
