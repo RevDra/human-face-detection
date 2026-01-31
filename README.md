@@ -1,12 +1,12 @@
 # 🔍 YOLOv8 Human Face Detection Web Application
 
-A professional, real-time face detection system built with YOLOv8 and Flask. Detect faces in images, videos, and live webcam streams with high accuracy.
-View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I have modified for better alignment to Hugging Face Spaces.
-
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://revdra-yolov8-hfd.hf.space/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-automated-blue)](config/Dockerfile)
+
+A professional, real-time face detection system built with YOLOv8 and Flask. Detect faces in images, videos, and live webcam streams with high accuracy.
+View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I have modified for better alignment to Hugging Face Spaces.
 
 ## ✨ Features
 
