@@ -194,11 +194,21 @@ FileNotFoundError: Model not found: models/yolov8m_200e.pt
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [OpenCV Documentation](https://docs.opencv.org/)
 
-## 🙏 Credits
+## 🙏 Acknowledgements & Licenses
 
-Special thanks to **[Yusepp](https://github.com/Yusepp)** for the [YOLOv8-Face](https://github.com/Yusepp/YOLOv8-Face) repository and the pre-trained face-optimized models used in this project.
+This project uses the following open-source components:
 
+1.  **YOLOv8** by Ultralytics:
+    -   License: [AGPL-3.0](https://github.com/ultralytics/ultralytics/blob/main/LICENSE)
+    -   Source: https://github.com/ultralytics/ultralytics
+
+2.  **Pre-trained Weights (Model)** by yusepp:
+    -   License: [GPL-3.0](https://github.com/Yusepp/YOLOv8-Face/blob/main/LICENSE)
+    -   Source: https://github.com/Yusepp/YOLOv8-Face.git
+      
+**Project License:**
+This entire project is licensed under the **AGPL-3.0** to comply with the licensing terms of both YOLOv8 and the utilized weights.
 ---
 
-**Last Updated:** January 28, 2026 |
+**Last Updated:** January 31, 2026 |
 **Status:** ✅ Production Ready
