@@ -89,10 +89,10 @@ Once all models are downloaded, you can select them from the web interface:
 
 | Model | Suffix | Best Use Case | Inference Speed | Accuracy |
 |-------|--------|---------------|-----------------|----------|
-| Nano | n | Webcam | CPU | 🚀 Very Fast | ⭐⭐⭐
-| Small | s | Standard Video | 🚀 Fast | ⭐⭐⭐⭐
-| Medium | m | Analysis | GPU | 🐢 Moderate | ⭐⭐⭐⭐⭐
-| Large | l | High-Res Images | 🐢 Slow | ⭐⭐⭐⭐⭐⭐
+| Nano | n | Webcam CPU | 🚀 Very Fast | ⭐⭐⭐ |
+| Small | s | Standard Video | 🚀 Fast | ⭐⭐⭐⭐ |
+| Medium | m | Analysis GPU | 🐢 Moderate | ⭐⭐⭐⭐⭐ |
+| Large | l | High-Res Images | 🐢 Slow | ⭐⭐⭐⭐⭐⭐ |
 
 ## 🐛 Troubleshooting
 
@@ -128,5 +128,6 @@ FileNotFoundError: Model not found: models/yolov8m_200e.pt
 ---
 
 **Note:** The medium and large models in this project are from the YOLOv8-Face repository, which are specifically optimized for face detection. For generic object detection models, refer to the official Ultralytics documentation.
+
 
 
