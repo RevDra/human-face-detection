@@ -1,20 +1,18 @@
 @echo off
-REM YOLOv8 Face Detection - Windows Deployment Script
+REM YOLOv12 Face Detection - Windows Deployment Script (Matched with Hugging Face Config)
 REM Usage: deploy.bat [start|stop|restart|status]
 
 setlocal enabledelayedexpansion
-
-set APP_NAME=face-detection-web
-set APP_PORT=5000
+set APP_NAME=face-detection-yolov12
+set APP_PORT=7860
 set VENV_PATH=%CD%\venv
 set PYTHON=%VENV_PATH%\Scripts\python.exe
 set PIP=%VENV_PATH%\Scripts\pip.exe
-set GUNICORN=%VENV_PATH%\Scripts\gunicorn.exe
 
 echo.
-echo ========================================
-echo YOLOv8 Face Detection - Windows Deployment
-echo ========================================
+echo ===================================================
+echo YOLOv12 Face Detection - Local Server (Port %APP_PORT%)
+echo ===================================================
 echo.
 
 REM Check if command provided
@@ -64,12 +62,12 @@ echo Usage: deploy.bat [command]
 echo.
 echo Commands:
 echo   install   - Install Python dependencies
-echo   setup     - Setup virtual environment
-echo   start     - Start the application
+echo   setup     - Setup virtual environment (venv)
+echo   start     - Start the application (src/web_app.py)
 echo   stop      - Stop the application
 echo   restart   - Restart the application
-echo   status    - Check application status
-echo   deploy    - Full deployment setup
+echo   status    - Check if port %APP_PORT% is active
+echo   deploy    - Full setup and start
 echo.
 goto :eof
 
@@ -93,7 +91,7 @@ if exist "%VENV_PATH%" (
 python -m venv "%VENV_PATH%"
 if %ERRORLEVEL% neq 0 (
     echo [!] Failed to create virtual environment
-    echo [*] Make sure Python 3.10+ is installed and in PATH
+    echo [*] Make sure Python is installed and in PATH
     exit /b 1
 )
 echo [+] Virtual environment created
@@ -115,26 +113,18 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%APP_PORT%') do (
     set PID=%%a
     if defined PID (
         echo [!] Port %APP_PORT% is already in use by process !PID!
-        echo [*] Kill the process? (Y/N)
-        set /p RESPONSE=
-        if /i "!RESPONSE!"=="Y" (
-            taskkill /PID !PID! /F
-            timeout /t 1 /nobreak
-        ) else (
-            exit /b 1
-        )
+        echo [*] Killing process !PID!...
+        taskkill /PID !PID! /F >nul 2>&1
+        timeout /t 1 /nobreak
     )
 )
 
-REM Install Gunicorn if not present
-if not exist "%GUNICORN%" (
-    echo [*] Installing Gunicorn...
-    "%PIP%" install gunicorn
-)
-
 REM Start application
+REM Lưu ý: Chạy trực tiếp web_app.py thay vì gunicorn trên Windows
 echo [*] Starting Flask server on http://localhost:%APP_PORT%
-start cmd /k "cd /d %CD% && %VENV_PATH%\Scripts\python.exe -m gunicorn -w 4 -b 0.0.0.0:%APP_PORT% --timeout 120 web_app:app"
+echo [*] Logs are shown in the new window...
+
+start "YOLOv12 Face Detection Server" cmd /k "cd /d %CD% && "%PYTHON%" src\web_app.py"
 
 REM Wait for app to start
 timeout /t 3 /nobreak
@@ -142,26 +132,30 @@ timeout /t 3 /nobreak
 REM Check if running
 netstat -ano | findstr :%APP_PORT% >nul
 if %ERRORLEVEL% equ 0 (
-    echo [+] Application started successfully
+    echo [+] Application started successfully!
     echo [+] Access at http://localhost:%APP_PORT%
     timeout /t 2 /nobreak
     start http://localhost:%APP_PORT%
 ) else (
-    echo [!] Failed to start application
+    echo [!] Failed to start application. Check the other window for errors.
     exit /b 1
 )
 goto :eof
 
 :stop_app
-echo [*] Stopping application...
+echo [*] Stopping application on port %APP_PORT%...
+set FOUND=0
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%APP_PORT%') do (
     set PID=%%a
     if defined PID (
-        taskkill /PID !PID! /F
+        taskkill /PID !PID! /F >nul 2>&1
         echo [+] Stopped process !PID!
+        set FOUND=1
     )
 )
-echo [+] Application stopped
+if %FOUND% equ 0 (
+    echo [-] No process found running on port %APP_PORT%
+)
 goto :eof
 
 :check_status
@@ -169,11 +163,6 @@ echo [*] Checking application status...
 netstat -ano | findstr :%APP_PORT% >nul
 if %ERRORLEVEL% equ 0 (
     echo [+] Application is RUNNING on port %APP_PORT%
-    echo.
-    echo [*] Process details:
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%APP_PORT%') do (
-        tasklist /FI "PID eq %%a" | findstr gunicorn
-    )
 ) else (
     echo [-] Application is NOT running
 )
@@ -182,58 +171,61 @@ goto :eof
 :full_deploy
 echo.
 echo ========================================
-echo Full Deployment Setup
+echo Full Deployment Setup (Local)
 echo ========================================
 echo.
 
-REM Check Python installation
+REM Check Python
 python --version >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [!] Python not found in PATH
-    echo [*] Please install Python 3.10+ from https://www.python.org/
     exit /b 1
 )
-
 echo [+] Python found
-python --version
 
-REM Setup virtual environment
+REM Setup venv
 if not exist "%VENV_PATH%" (
     call :setup_app
 ) else (
-    echo [+] Virtual environment already exists
+    echo [+] Virtual environment exists
     call :install_deps
 )
 
-REM Check model files
-echo [*] Checking for required model files...
+REM Check model files (Updated for YOLOv12)
+echo [*] Checking for required model files in models folder...
 set MISSING=0
-if not exist "yolov8n_100e.pt" (
-    echo [-] Missing: yolov8n_100e.pt
+
+if not exist "models" mkdir models
+
+if not exist "models\yolov12n-face.pt" (
+    echo [-] Missing: models\yolov12n-face.pt
     set MISSING=1
 )
-if not exist "yolov8m_200e.pt" (
-    echo [-] Missing: yolov8m_200e.pt
+if not exist "models\yolov12s-face.pt" (
+    echo [-] Missing: models\yolov12s-face.pt
     set MISSING=1
 )
-if not exist "yolov8l_100e.pt" (
-    echo [-] Missing: yolov8l_100e.pt
+if not exist "models\yolov12m-face.pt" (
+    echo [-] Missing: models\yolov12m-face.pt
+    set MISSING=1
+)
+if not exist "models\yolov12l-face.pt" (
+    echo [-] Missing: models\yolov12l-face.pt
     set MISSING=1
 )
 
 if %MISSING% equ 1 (
     echo.
-    echo [!] Some model files are missing!
-    echo [*] Please download the required models and place them in:
-    echo    %CD%
+    echo [!] Some YOLOv12 model files are missing in 'models\' folder!
+    echo [*] Please train/download them and place them in the 'models' folder.
     echo.
     pause
 )
 
-REM Create uploads directory
-if not exist "uploads" (
-    mkdir uploads
-    echo [+] Created uploads directory
+REM Create uploads directory (Matched with web_app.py structure)
+if not exist "data\uploads" (
+    mkdir "data\uploads"
+    echo [+] Created data\uploads directory
 )
 
 REM Display summary
@@ -244,16 +236,8 @@ echo ========================================
 echo.
 echo [+] Virtual Environment: %VENV_PATH%
 echo [+] Application Port: %APP_PORT%
-echo [+] Python: %PYTHON%
-echo [+] Application URL: http://localhost:%APP_PORT%
+echo [+] Script Path: src\web_app.py
 echo.
-echo [*] Next steps:
-echo    1. Start application: deploy.bat start
-echo    2. Open http://localhost:%APP_PORT%
-echo    3. Test image and video detection
-echo    4. Monitor logs in console window
-echo.
-
 pause
 call :start_app
 goto :eof
