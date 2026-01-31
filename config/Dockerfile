@@ -22,7 +22,7 @@ COPY . .
 RUN mkdir -p data/uploads data/samples data/outputs
 
 # Expose port
-EXPOSE 5000
+EXPOSE 7860
 
 # Set environment variables
 ENV FLASK_APP=src/web_app.py
@@ -30,3 +30,4 @@ ENV PYTHONUNBUFFERED=1
 
 # Run the application
 CMD ["python", "src/web_app.py"]
+
