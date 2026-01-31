@@ -1,15 +1,15 @@
 #!/bin/bash
-# YOLOv8 Face Detection - Production Deployment Script
-# Usage: bash deploy.sh [start|stop|restart|status|logs]
+# YOLOv12 Face Detection - Production Deployment Script
+# Usage: bash deploy.sh [start|stop|restart|status|logs|deploy]
 
 set -e
 
-APP_NAME="face-detection-web"
+APP_NAME="face-detection-yolov12"
 APP_USER="facedetection"
 APP_HOME="/opt/face-detection"
 LOG_DIR="/var/log/face-detection"
 SERVICE_NAME="face-detection"
-PORT="5000"
+PORT="7860"
 
 # Colors for output
 RED='\033[0;31m'
@@ -32,7 +32,7 @@ echo_warning() {
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        echo_error "This script must be run as root"
+        echo_error "This script must be run as root (sudo)"
         exit 1
     fi
 }
@@ -41,8 +41,9 @@ check_root() {
 install_deps() {
     echo_info "Installing system dependencies..."
     apt-get update
+    # Thêm libgl1 cho OpenCV
     apt-get install -y python3.10 python3-pip python3-venv
-    apt-get install -y libsm6 libxext6 libxrender-dev
+    apt-get install -y libsm6 libxext6 libxrender-dev libgl1
     apt-get install -y nginx supervisor
     echo_info "Dependencies installed successfully"
 }
@@ -61,13 +62,49 @@ setup_app() {
     fi
     
     # Create virtual environment
-    python3.10 -m venv $APP_HOME/venv
-    echo_info "Created virtual environment"
+    if [ ! -d "$APP_HOME/venv" ]; then
+        python3 -m venv $APP_HOME/venv
+        echo_info "Created virtual environment"
+    fi
     
     # Create log directory
     mkdir -p $LOG_DIR
     chown $APP_USER:$APP_USER $LOG_DIR
     chmod 755 $LOG_DIR
+
+    # Create uploads directory
+    mkdir -p "$APP_HOME/data/uploads"
+    mkdir -p "$APP_HOME/models"
+    
+    # Authorized user app
+    chown -R $APP_USER:$APP_USER $APP_HOME
+    chmod -R 777 "$APP_HOME/data"
+}
+
+# Check and setup models
+check_models() {
+    echo_info "Checking YOLOv12 models..."
+    MISSING=0
+    MODELS=("yolov12n-face.pt" "yolov12s-face.pt" "yolov12m-face.pt" "yolov12l-face.pt")
+    
+    for model in "${MODELS[@]}"; do
+        if [ ! -f "$APP_HOME/models/$model" ]; then
+            # Kiểm tra xem có file ở thư mục hiện tại không để copy vào
+            if [ -f "./models/$model" ]; then
+                cp "./models/$model" "$APP_HOME/models/"
+                echo_info "Copied $model to installation dir"
+            else
+                echo_warning "Missing model: $model"
+                MISSING=1
+            fi
+        fi
+    done
+    
+    if [ $MISSING -eq 1 ]; then
+        echo_warning "Some YOLOv12 models are missing in $APP_HOME/models/"
+    fi
+    
+    chown -R $APP_USER:$APP_USER "$APP_HOME/models"
 }
 
 # Install Python dependencies
@@ -86,14 +123,15 @@ setup_supervisor() {
     
     cat > /etc/supervisor/conf.d/face-detection.conf <<EOF
 [program:face-detection]
-command=$APP_HOME/venv/bin/gunicorn -w 4 -b 0.0.0.0:$PORT --timeout 120 web_app:app
+# Lưu ý: trỏ vào src.web_app:app vì file nằm trong folder src
+command=$APP_HOME/venv/bin/gunicorn -w 4 -b 0.0.0.0:$PORT --timeout 120 src.web_app:app
 directory=$APP_HOME
 user=$APP_USER
 autostart=true
 autorestart=true
 redirect_stderr=true
 stdout_logfile=$LOG_DIR/gunicorn.log
-environment=PATH=$APP_HOME/venv/bin,PYTHONUNBUFFERED=1
+environment=PATH=$APP_HOME/venv/bin,PYTHONUNBUFFERED=1,PYTHONPATH=$APP_HOME
 EOF
     
     supervisorctl reread
@@ -105,9 +143,9 @@ EOF
 setup_nginx() {
     echo_info "Setting up Nginx reverse proxy..."
     
-    cat > /etc/nginx/sites-available/face-detection <<'EOF'
+    cat > /etc/nginx/sites-available/face-detection <<EOF
 upstream face_detection {
-    server 0.0.0.0:5000 fail_timeout=0;
+    server 0.0.0.0:$PORT fail_timeout=0;
 }
 
 server {
@@ -118,15 +156,12 @@ server {
     access_log /var/log/nginx/face-detection-access.log;
     error_log /var/log/nginx/face-detection-error.log;
     
-    # Redirect HTTP to HTTPS (uncomment after setting up SSL)
-    # return 301 https://$server_name$request_uri;
-    
     location / {
         proxy_pass http://face_detection;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_redirect off;
         
         # Timeouts for large file uploads
@@ -137,33 +172,10 @@ server {
     
     location /api/download {
         proxy_pass http://face_detection;
-        proxy_set_header Host $host;
+        proxy_set_header Host \$host;
         proxy_buffering off;
     }
 }
-
-# HTTPS configuration (uncomment after setting up SSL with Let's Encrypt)
-# server {
-#     listen 443 ssl http2;
-#     server_name YOUR_DOMAIN;
-#     
-#     ssl_certificate /etc/letsencrypt/live/YOUR_DOMAIN/fullchain.pem;
-#     ssl_certificate_key /etc/letsencrypt/live/YOUR_DOMAIN/privkey.pem;
-#     
-#     ssl_protocols TLSv1.2 TLSv1.3;
-#     ssl_ciphers HIGH:!aNULL:!MD5;
-#     ssl_prefer_server_ciphers on;
-#     
-#     client_max_body_size 500M;
-#     
-#     location / {
-#         proxy_pass http://face_detection;
-#         proxy_set_header Host $host;
-#         proxy_set_header X-Real-IP $remote_addr;
-#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-#         proxy_set_header X-Forwarded-Proto https;
-#     }
-# }
 EOF
     
     ln -sf /etc/nginx/sites-available/face-detection /etc/nginx/sites-enabled/
@@ -182,7 +194,8 @@ start_app() {
     
     if supervisorctl status face-detection | grep -q "RUNNING"; then
         echo_info "Application started successfully"
-        echo_info "Access at http://localhost:$PORT"
+        echo_info "Internal App Port: $PORT"
+        echo_info "Public Access: http://localhost (via Nginx)"
     else
         echo_error "Failed to start application"
         supervisorctl tail face-detection
@@ -229,16 +242,18 @@ show_logs() {
 
 # Full deployment
 full_deploy() {
-    echo_info "Starting full deployment..."
+    echo_info "Starting full deployment (YOLOv12 Production)..."
     check_root
     install_deps
     setup_app
     
     # Copy application files
     echo_info "Copying application files..."
-    cp -r . $APP_HOME/
+    # Copy all except venv & git
+    rsync -av --progress . $APP_HOME --exclude venv --exclude .git
     chown -R $APP_USER:$APP_USER $APP_HOME
     
+    check_models
     install_python_deps
     setup_supervisor
     setup_nginx
@@ -247,17 +262,11 @@ full_deploy() {
     echo_info "Deployment completed successfully!"
     echo ""
     echo "=========================================="
-    echo "Application deployed!"
+    echo "YOLOv12 Face Detection Deployed!"
     echo "=========================================="
-    echo "URL: http://localhost"
+    echo "Public URL: http://localhost (Port 80 -> $PORT)"
     echo "Logs: tail -f $LOG_DIR/gunicorn.log"
     echo "Status: supervisorctl status face-detection"
-    echo ""
-    echo "Next steps:"
-    echo "1. Verify app is running: curl http://localhost"
-    echo "2. Setup SSL/HTTPS (see comments in Nginx config)"
-    echo "3. Configure domain name"
-    echo "4. Setup monitoring and alerts"
     echo ""
 }
 
@@ -294,16 +303,6 @@ case "${1:-status}" in
         ;;
     *)
         echo "Usage: $0 {install|setup|start|stop|restart|status|logs|deploy}"
-        echo ""
-        echo "Commands:"
-        echo "  install   - Install system dependencies"
-        echo "  setup     - Setup application directory and user"
-        echo "  start     - Start the application"
-        echo "  stop      - Stop the application"
-        echo "  restart   - Restart the application"
-        echo "  status    - Check application status"
-        echo "  logs      - Follow application logs"
-        echo "  deploy    - Full deployment (requires root)"
         exit 1
         ;;
 esac
