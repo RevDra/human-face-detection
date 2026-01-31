@@ -2,7 +2,7 @@
 
 ## Our Pledge
 
-We, as members, contributors, and leaders, pledge to make participation in our
+We as members, contributors, and leaders pledge to make participation in our
 community a harassment-free experience for everyone, regardless of age, body
 size, visible or invisible disability, ethnicity, sex characteristics, gender
 identity and expression, level of experience, education, socio-economic status,
@@ -14,8 +14,8 @@ diverse, inclusive, and healthy community.
 
 ## Our Standards
 
-Examples of behavior that contribute to a positive environment for our
-community includes:
+Examples of behavior that contributes to a positive environment for our
+community include:
 
 * Demonstrating empathy and kindness toward other people
 * Being respectful of differing opinions, viewpoints, and experiences
@@ -27,17 +27,21 @@ community includes:
 
 Examples of unacceptable behavior include:
 
-* The use of sexualized language or imagery, and sexual attention or advances of any kind
-* Trolling, insulting, or derogatory comments, and personal or political attacks
+* The use of sexualized language or imagery, and sexual attention or
+  advances of any kind
+* Trolling, insulting or derogatory comments, and personal or political attacks
 * Public or private harassment
-* Publishing others' private information, such as a physical or email address, without their explicit permission
-* Other conduct which could reasonably be considered inappropriate in a professional setting
+* Publishing others' private information, such as a physical or email
+  address, without their explicit permission
+* Other conduct which could reasonably be considered inappropriate in a
+  professional setting
 
 ## Enforcement Responsibilities
 
 Community leaders are responsible for clarifying and enforcing our standards of
 acceptable behavior and will take appropriate and fair corrective action in
-response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
+response to any behavior that they deem inappropriate, threatening, offensive,
+or harmful.
 
 Community leaders have the right and responsibility to remove, edit, or reject
 comments, commits, code, wiki edits, issues, and other contributions that are
@@ -78,7 +82,8 @@ behavior was inappropriate. A public apology may be requested.
 
 ### 2. Warning
 
-**Community Impact**: A violation through a single incident or series of actions.
+**Community Impact**: A violation through a single incident or series
+of actions.
 
 **Consequence**: A warning with consequences for continued behavior. No
 interaction with the people involved, including unsolicited interaction with
@@ -104,7 +109,8 @@ Violating these terms may lead to a permanent ban.
 standards, including sustained inappropriate behavior,  harassment of an
 individual, or aggression toward or disparagement of classes of individuals.
 
-**Consequence**: A permanent ban from any public interaction within the community.
+**Consequence**: A permanent ban from any sort of public interaction within
+the community.
 
 ## Attribution
 
@@ -117,6 +123,6 @@ enforcement ladder](https://github.com/mozilla/diversity).
 
 [homepage]: https://www.contributor-covenant.org
 
-For answers to common questions about this code of conduct, please take a look at the FAQ at
+For answers to common questions about this code of conduct, see the FAQ at
 https://www.contributor-covenant.org/faq. Translations are available at
 https://www.contributor-covenant.org/translations.
