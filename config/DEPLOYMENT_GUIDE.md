@@ -385,6 +385,7 @@ sudo bash deploy.sh deploy
 ## 🔧 API Endpoints
 
 | Method | Endpoint | Description |
+|--------|----------|-------------|
 | POST | /api/detect-image | Upload image & get detection result (Base64) |
 | POST | /api/detect-video | Upload video & process frames |
 | GET | /api/models | Get list of available YOLOv12 models |
@@ -526,3 +527,4 @@ Before going live, ensure:
 **Created:** January 31, 2026
 **Version:** 2.0 (YOLOv12 Upgrade)
 **Status:** Production Ready ✅
+
