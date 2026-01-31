@@ -1,17 +1,18 @@
-# 🔍 YOLOv8 Human Face Detection Web Application
+# 🔍 YOLOv12 Human Face Detection Web Application
 
-[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://revdra-yolov8-hfd.hf.space/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/docker-automated-blue)](config/Dockerfile)
+[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/RevDra/YOLOv12_HFD)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-supported-2496ED?logo=docker&logoColor=white)](config/Dockerfile)
 
-A professional, real-time face detection system built with YOLOv8 and Flask. Detect faces in images, videos, and live webcam streams with high accuracy.
-View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I have modified for better alignment to Hugging Face Spaces.
+A professional, real-time face detection system built with YOLOv12 and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy and speed.
+View the demo using this [link](https://revdra-yolov8-hfd.hf.space/).
 
 ## ✨ Features
 
 ### 📷 Image Detection
 - Upload and detect faces in images (JPG, PNG, GIF)
+- Attention-based detection for small/occluded faces
 - Real-time detection with confidence scores
 - Download annotated result images
 - Display face statistics (count, position, size)
@@ -20,7 +21,6 @@ View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I ha
 - Process video files (MP4, AVI, MOV, MKV)
 - Annotate each frame with bounding boxes
 - Download processed video
-- Watch results directly in the web player
 
 ### 📹 Live Webcam
 - Real-time detection from your webcam
@@ -29,14 +29,15 @@ View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I ha
 - Start/stop controls
 
 ### 🤖 Model Selection
-- **YOLOv8 Nano** (yolov8n_100e.pt) - Fastest
-- **YOLOv8 Medium** (yolov8m_200e.pt) - Balanced speed/accuracy
-- **YOLOv8 Large** (yolov8l_100e.pt) - Best accuracy
+- **YOLOv12 Nano** (yolov12n-face.pt) - Super Fast, best for CPU/Webcam
+- **YOLOv12 Small** (yolov12s-face.pt) - Balanced speed & accuracy
+- **YOLOv8 Medium** (yolov12m-face.pt) - High precision
+- **YOLOv8 Large** (yolov12l-face.pt) - State-of-the-art accuracy
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.10+
 - Required packages (see below)
 
 ### Installation
@@ -47,14 +48,18 @@ pip install -r requirements.txt
 ```
 
 2. **Run the web server:**
+# Linux/Mac
 ```bash
-python src/web_app.py
+./config/deploy.sh start
 ```
 
-3. **Open in browser:**
+# Windows
+```bash
+config\deploy.bat start
 ```
-http://localhost:5000
-```
+
+3. **Open in browser**
+https://localhost:7860
 
 ## 📁 Project Structure
 
@@ -62,14 +67,17 @@ http://localhost:5000
 Human_face_detection/
 ├── README.md                           # Main documentation
 ├── requirements.txt                    # Python dependencies
+├── LICENSE
+├── CODE_OF_CONDUCT.md
 │
 ├── src/                                # Source code
 │   ├── web_app.py                     # Flask web server
 │   └── face_detection_yolov8.py       # YOLOv8 detection engine
 │
-├── models/                             # YOLOv8 models
-│   ├── yolov8n_100e.pt                # YOLOv8 Nano (fastest)
-|   └── MODELS.md                      # Instruction to download YOLOv8 Medium (yolov8m_200e.pt) and Large (yolov8l_100e.pt)
+├── models/                             # YOLOv12 models
+│   ├── yolov12s-face.pt                 # YOLOv12 Small (Balanced)
+│   ├── yolov12n-face.pt                 # YOLOv12 Nano (fastest)
+|   └── MODELS.md                      # Instruction to download YOLOv12 Medium (yolov12m-face.pt) and Large (yolov12-face.pt)
 │
 ├── web/                                # Web interface
 │   └── templates/
@@ -110,8 +118,8 @@ import requests
 # Detect faces in image
 with open('image.jpg', 'rb') as f:
     files = {'file': f}
-    data = {'model': 'yolov8m_200e.pt'}
-    response = requests.post('http://localhost:5000/api/detect-image', 
+    data = {'model': 'yolov12l-face.pt'}
+    response = requests.post('http://localhost:7860/api/detect-image', 
                             files=files, data=data)
     result = response.json()
     
@@ -147,23 +155,23 @@ Default: 0.35 (35%)
 Edit `web_app.py` to modify:
 - `MAX_FILE_SIZE` - Maximum upload size (default: 500MB)
 - `UPLOAD_FOLDER` - Temporary file location
-- `conf_threshold` - Detection confidence threshold (default: 0.35)
+- `PORT` - Application port (default: 7860)
 
 ## 📝 Notes
 
 ### Model Files Required
 Three model files are required in the `models/` directory:
-- `yolov8n_100e.pt` (23 MB) ✅ Included
-- `yolov8m_200e.pt` (197 MB) 📥 [Download](models/MODELS.md)
-- `yolov8l_100e.pt` (83 MB) 📥 [Download](models/MODELS.md)
+- `yolov12n-face.pt` (5.3 MB) ✅ Included
+- `yolov12s-face.pt` (18.5 MB) ✅ Included
+- `yolov12m_face.pt` (39.8 MB) 📥 [Download](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12m-face.pt)
+- `yolov12l_face.pt` (52.3 MB) 📥 [Download](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt)
 
 **See [models/MODELS.md](models/MODELS.md) for detailed download instructions.**
 
 ### Performance Tips
-1. Use **YOLOv8 Nano** for webcam (fastest)
-2. Use **YOLOv8 Medium** for videos (balanced)
-3. Use **YOLOv8 Large** for images (most accurate)
-4. Reduce image/video resolution for faster processing
+1. Use YOLOv12 Nano for webcam to achieve high FPS.
+2. Use YOLOv12 Large for high-resolution static images.
+3. If running on Hugging Face Spaces (CPU), stick to Nano or Small models.
 
 ### Browser Compatibility
 - Chrome/Edge: ✅ Full support
@@ -175,27 +183,27 @@ Three model files are required in the `models/` directory:
 
 ### Models Not Found
 ```
-FileNotFoundError: Model not found: models/yolov8m_200e.pt
+FileNotFoundError: Model not found: models/yolov12m-face.pt
 ```
-**Solution:** Download missing models from [models/MODELS.md](models/MODELS.md). Only `yolov8n_100e.pt` is included by default.
+**Solution:** Download missing models from [models/MODELS.md](models/MODELS.md). Only `yolov12n-face.pt` and `yolov12s-face.pt` are included by default.
 
 ### Camera Permission Denied
-**Solution:** Grant camera permission in browser settings or use HTTPS
+**Solution:** Grant camera permission in browser settings. If deploying on a remote server, you must use HTTPS for the webcam to work.
 
 ### Out of Memory
-**Solution:** Use smaller model (Nano) or reduce video resolution
+**Solution:** Use a smaller model (Nano) or reduce video resolution
 
 ### Slow Detection
 **Solution:** 
-- Use YOLOv8 Nano
+- Use YOLOv12 Nano
 - Reduce input resolution
 - Check CPU/GPU usage
 
 ## 📚 References
 
 - [Model Setup Guide](models/MODELS.md) - Download and setup instructions
-- [YOLOv8-Face Repository](https://github.com/Yusepp/YOLOv8-Face) - Original face-optimized models
-- [Ultralytics YOLOv8](https://docs.ultralytics.com/) - YOLOv8 documentation
+- [YOLOv8-Face Repository](https://github.com/YapaLab/yolo-face) - Source of the models/weights.
+- [Ultralytics YOLOv12](https://docs.ultralytics.com/) - YOLOv12 documentation.
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [OpenCV Documentation](https://docs.opencv.org/)
 
@@ -203,16 +211,16 @@ FileNotFoundError: Model not found: models/yolov8m_200e.pt
 
 This project uses the following open-source components:
 
-1.  **YOLOv8** by Ultralytics:
+1.  **YOLOv12** by Ultralytics:
     -   License: [AGPL-3.0](https://github.com/ultralytics/ultralytics/blob/main/LICENSE)
-    -   Source: https://github.com/ultralytics/ultralytics
+    -   Source: [https://github.com/ultralytics/ultralytics](https://github.com/ultralytics/ultralytics)
 
-2.  **Pre-trained Weights (Model)** by yusepp:
-    -   License: [GPL-3.0](https://github.com/Yusepp/YOLOv8-Face/blob/main/LICENSE)
-    -   Source: https://github.com/Yusepp/YOLOv8-Face.git
+2.  **Face Detection Weights** inspired by YapaLab:
+    -   License: [GPL-3.0](https://github.com/YapaLab/yolo-face/blob/dev/LICENSE)
+    -   Source: [https://github.com/Yusepp/YOLOv8-Face.git](https://github.com/YapaLab/yolo-face)
       
 **Project License:**
-This entire project is licensed under the **AGPL-3.0** to comply with the licensing terms of both YOLOv8 and the utilized weights.
+This entire project is licensed under the AGPL-3.0 to comply with the licensing terms of the YOLO ecosystem.
 ---
 
 **Last Updated:** January 31, 2026 |
