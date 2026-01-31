@@ -3,7 +3,7 @@
 ## 🎯 Quick Reference
 
 ### 🚀 Start Here
-1. Read: **WEB_QUICKSTART.md** (5 min)
+1. Read: **DEPLOYMENT_GUIDE.md** (5 min)
 2. Run (Linux/Mac): `bash deploy.sh start`
 3. Run (Windows): `deploy.bat start`
 4. Visit: http://localhost:7860
@@ -31,54 +31,6 @@
 - `models/yolov12l-face.pt`: Large (Best for Static Images).
   
 ### Documentation Files
-
-✅ WEB_QUICKSTART.md (START HERE)
-   - 5-minute quick start
-   - 3-step setup instructions
-   - Common issues & solutions
-   - API usage examples
-   - ~300 lines
-
-✅ WEB_SUMMARY.md
-   - Architecture overview
-   - File structure explanation
-   - API endpoints summary
-   - Model comparison
-   - Configuration options
-   - Pro tips
-   - ~500 lines
-
-✅ WEB_README.md (COMPLETE REFERENCE)
-   - Full API documentation
-   - Configuration guide
-   - Docker deployment
-   - Cloud deployment (Heroku, AWS, Azure, GCP)
-   - Security considerations
-   - Performance optimization
-   - Troubleshooting guide
-   - ~600 lines
-
-✅ DEPLOYMENT_GUIDE.md
-   - Step-by-step deployment
-   - API endpoint examples
-   - Model selection guide
-   - Docker detailed guide
-   - Cloud deployment detailed guide
-   - Security hardening checklist
-   - Performance optimization
-   - Monitoring & logging
-   - ~800 lines
-
-✅ DEPLOYMENT_CHECKLIST.md
-   - Pre-deployment checklist
-   - Post-deployment checklist
-   - Development deployment guide
-   - Docker deployment verification
-   - Cloud deployment steps
-   - Security testing
-   - Performance testing
-   - Rollback plan
-   - ~400 lines
 
 ✅ DEPLOYMENT_GUIDE.txt (THIS FILE)
    - Overview of all files created
@@ -138,26 +90,6 @@ Human_face_detection/
     └── data/
         └── uploads/                Temporary file storage
 ```
-
----
-
-## 📖 Reading Order (Recommended)
-
-### For Quick Start (10 minutes)
-1. **WEB_QUICKSTART.md** - Get running in 3 steps
-2. Open web browser to http://localhost:7860
-3. Try uploading an image and video
-
-### For Understanding (30 minutes)
-1. **WEB_SUMMARY.md** - Understand the architecture
-2. **WEB_README.md** - API endpoints and configuration
-3. Review **templates/index.html** source code
-
-### For Deployment (1 hour)
-1. **DEPLOYMENT_GUIDE.md** - Choose platform
-2. **DEPLOYMENT_CHECKLIST.md** - Pre-deployment verification
-3. **Dockerfile + docker-compose.yml** - If deploying with Docker
-4. **deploy.sh or deploy.bat** - If deploying on Linux/Windows
 
 ---
 
@@ -401,32 +333,6 @@ sudo bash deploy.sh deploy
 | CPU | 50-100% (during detection) |
 | Disk | Uploads only |
 | Network | Variable |
-
----
-
-## 🎓 Learning Path
-
-### Beginner
-1. Run locally: `python web_app.py`
-2. Test web interface
-3. Try image detection
-4. Try video detection
-5. Read WEB_QUICKSTART.md
-
-### Intermediate
-1. Understand API endpoints
-2. Read WEB_README.md
-3. Review web_app.py code
-4. Modify configuration
-5. Try Docker
-
-### Advanced
-1. Cloud deployment
-2. Security hardening
-3. Performance optimization
-4. Monitoring setup
-5. Production deployment
-
 ---
 
 ## ✅ Pre-Launch Checklist
@@ -455,8 +361,7 @@ Before going live, ensure:
 
 ### Detailed Help
 1. Check console output for errors
-2. Read WEB_README.md FAQ section
-3. Review DEPLOYMENT_CHECKLIST.md
+2. Read README.md FAQ section
 4. Check DEPLOYMENT_GUIDE.md troubleshooting
 
 ---
@@ -475,5 +380,3 @@ Before going live, ensure:
 **Created:** January 31, 2026
 **Version:** 2.0 (YOLOv12 Upgrade)
 **Status:** Production Ready ✅
-
-
