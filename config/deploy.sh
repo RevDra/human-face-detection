@@ -1,4 +1,8 @@
 #!/bin/bash
+# --- FIX PATH FOR FOLDER CONFIG ---
+cd "$(dirname "$0")/.."
+echo "[INFO] Working Directory set to: $(pwd)"
+# ----------------------------------
 # YOLOv12 Face Detection - Production Deployment Script
 # Usage: bash deploy.sh [start|stop|restart|status|logs|deploy]
 
