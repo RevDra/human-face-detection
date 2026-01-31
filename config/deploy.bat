@@ -1,4 +1,8 @@
 @echo off
+REM --- FIX PATH FOR FOLDER CONFIG ---
+cd /d "%~dp0.."
+echo [*] Working Directory set to: %CD%
+REM ----------------------------------
 REM YOLOv12 Face Detection - Windows Deployment Script (Matched with Hugging Face Config)
 REM Usage: deploy.bat [start|stop|restart|status]
 
