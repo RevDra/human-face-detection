@@ -48,12 +48,12 @@ pip install -r requirements.txt
 ```
 
 2. **Run the web server:**
-# Linux/Mac
+#### Linux/Mac
 ```bash
 ./config/deploy.sh start
 ```
 
-# Windows
+#### Windows
 ```bash
 config\deploy.bat start
 ```
