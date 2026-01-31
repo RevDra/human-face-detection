@@ -2,32 +2,25 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    libgl1 \
+    libglib2.0-0 \
+    python3-tk \
+    tk-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
 COPY . .
 
-# Create data directories
-RUN mkdir -p data/uploads data/samples data/outputs
+# Đảm bảo quyền ghi cho các thư mục data
+RUN mkdir -p data/uploads data/samples data/outputs && chmod -R 777 /app
 
-# Expose port
 EXPOSE 7860
-
-# Set environment variables
-ENV FLASK_APP=src/web_app.py
 ENV PYTHONUNBUFFERED=1
 
-# Run the application
 CMD ["python", "src/web_app.py"]
-
