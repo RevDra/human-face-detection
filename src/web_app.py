@@ -1,5 +1,5 @@
 """
-Flask Web Application for YOLOv8 Face Detection
+Flask Web Application for YOLOv12 Face Detection
 Supports image upload, video upload, and live webcam streaming
 """
 
@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import base64
 
-from face_detection_yolov8 import YOLOv8FaceDetector, detect_from_video
+from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
 # Initialize Flask app
 app = Flask(__name__, template_folder='../web/templates')
@@ -37,7 +37,7 @@ def get_detector(model_name):
         model_path = MODELS_DIR / model_name
         if not model_path.exists():
             raise FileNotFoundError(f"Model not found: {model_path}")
-        detector_cache[model_name] = YOLOv8FaceDetector(str(model_path))
+        detector_cache[model_name] = YOLOv12FaceDetector(str(model_path))
     return detector_cache[model_name]
 
 
@@ -79,7 +79,7 @@ def detect_image():
             return jsonify({'error': 'Only image files allowed'}), 400
         
         # Get model selection
-        model = request.form.get('model', 'yolov8l_100e.pt')
+        model = request.form.get('model', 'yolov12l-face.pt')
         
         # Get detector
         detector = get_detector(model)
@@ -148,7 +148,7 @@ def detect_video():
             return jsonify({'error': 'Only video files allowed'}), 400
         
         # Get model selection
-        model = request.form.get('model', 'yolov8m_200e.pt')
+        model = request.form.get('model', 'yolov12m-face.pt')
         
         # Save uploaded file
         filename = secure_filename(file.filename)
@@ -193,33 +193,47 @@ def download_file(filename):
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
-    """Get available models"""
+    """Get ALL available models for dropdown selection"""
+    # Cập nhật danh sách đầy đủ 4 models
     models = {
-        'webcam': {
-            'name': 'yolov8n_100e.pt',
-            'description': 'YOLOv8 Nano - Fastest, Real-time (30-60 FPS)',
-            'use_case': 'Live webcam detection'
+        'nano': {
+            'name': 'yolov12n-face.pt',
+            'label': 'Nano (n) - Fastest',
+            'description': 'Real-time speed, best for CPU/Webcam',
+            'size': 'Smallest'
         },
-        'video': {
-            'name': 'yolov8m_200e.pt',
-            'description': 'YOLOv8 Medium - Balanced speed/accuracy',
-            'use_case': 'Video file processing'
+        'small': {
+            'name': 'yolov12s-face.pt',
+            'label': 'Small (s) - Balanced',
+            'description': 'Good balance of speed and accuracy',
+            'size': 'Small'
         },
-        'image': {
-            'name': 'yolov8l_100e.pt',
-            'description': 'YOLOv8 Large - Best accuracy',
-            'use_case': 'Static image analysis'
+        'medium': {
+            'name': 'yolov12m-face.pt',
+            'label': 'Medium (m) - High Precision',
+            'description': 'High accuracy, requires decent GPU',
+            'size': 'Medium'
+        },
+        'large': {
+            'name': 'yolov12l-face.pt',
+            'label': 'Large (l) - Max Accuracy',
+            'description': 'Best detection quality, slowest speed',
+            'size': 'Large'
         }
     }
     
-    # Check which models exist
+    # Chỉ trả về những model thực sự tồn tại trong thư mục
     available = {}
     for key, info in models.items():
         model_path = MODELS_DIR / info['name']
         if model_path.exists():
             available[key] = info
     
-    return jsonify(available)
+    # Sắp xếp theo thứ tự kích thước để hiển thị đẹp hơn
+    order = ['nano', 'small', 'medium', 'large']
+    sorted_available = {k: available[k] for k in order if k in available}
+    
+    return jsonify(sorted_available)
 
 
 @app.route('/api/health', methods=['GET'])
@@ -242,7 +256,7 @@ def internal_error(error):
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🌐 Starting YOLOv8 Face Detection Web Server")
+    print("🌐 Starting YOLOv12 Face Detection Web Server")
     print("="*70)
     print("\n📍 Server: http://localhost:5000")
     print("📁 Upload folder: ", UPLOAD_FOLDER)
@@ -258,7 +272,7 @@ if __name__ == '__main__':
     # Run Flask app
     app.run(
         host='0.0.0.0',
-        port=5000,
+        port=7860,
         debug=True,
         use_reloader=False
     )
