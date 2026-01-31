@@ -65,10 +65,14 @@ https://localhost:7860
 
 ```
 Human_face_detection/
-├── README.md                           # Main documentation
-├── requirements.txt                    # Python dependencies
+├── .github/                            # Github Actions (CI/CD)
+│   └── workflows/
+│       └── docker-publish.yml          # Auto-build & Publish Docker Image
+│
 ├── LICENSE                             # AGPL v3 License
 ├── CODE_OF_CONDUCT.md                  # Community guidelines
+├── README.md                           # Main documentation
+├── requirements.txt                    # Python dependencies
 │
 ├── src/                                # Source code
 │   ├── web_app.py                       # Flask web server
@@ -89,7 +93,6 @@ Human_face_detection/
     ├── deploy.sh                        # Linux deployment
     ├── deploy.bat                       # Windows deployment
     └── DEPLOYMENT_GUIDE.txt             # Deployment guide
-
 ```
 
 ## 🔧 API Endpoints
