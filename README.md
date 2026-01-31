@@ -31,8 +31,8 @@ View the demo using this [link](https://revdra-yolov8-hfd.hf.space/).
 ### 🤖 Model Selection
 - **YOLOv12 Nano** (yolov12n-face.pt) - Super Fast, best for CPU/Webcam
 - **YOLOv12 Small** (yolov12s-face.pt) - Balanced speed & accuracy
-- **YOLOv8 Medium** (yolov12m-face.pt) - High precision
-- **YOLOv8 Large** (yolov12l-face.pt) - State-of-the-art accuracy
+- **YOLOv12 Medium** (yolov12m-face.pt) - High precision
+- **YOLOv12 Large** (yolov12l-face.pt) - State-of-the-art accuracy
 
 ## 🚀 Quick Start
 
