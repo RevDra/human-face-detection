@@ -13,60 +13,25 @@
 ## 📁 Complete File List
 
 ### Core Application Files (Required)
-```
-✅ src/web_app.py
-   - Flask web server with REST API
-   - Optimized for Hugging Face Spaces (Port 7860)
-   - Handles image/video uploads
-   - Model caching for performance
-   - Error handling and logging
-   - ~300 lines, fully documented
+- `src/web_app.py`: Main Flask server (Port 7860), optimized for Hugging Face.
+- `src/face_detection_yolov12.py`: YOLOv12 logic core.
+- `web/templates/index.html`: Responsive UI with Webcam/Video support.
 
-✅ src/face_detection_yolov12.py
-   - YOLOv12 logic with Attention Mechanism
-   - Image & Video processing core
+### Deployment Files
+- `config/Dockerfile`: Docker configuration (Python 3.10-slim).
+- `config/docker-compose.yml`: Container orchestration.
+- `config/deploy.sh`: Automation script for Linux/Mac.
+- `config/deploy.bat`: Automation script for Windows.
+- `.github/workflows/docker-publish.yml`: CI/CD for auto-building Docker images.
 
-✅ web/templates/index.html
-   - Beautiful responsive UI
-   - Image detection interface
-   - Video detection interface
-   - Information panel
-   - ~800 lines HTML/CSS/JavaScript
-   - Mobile-friendly design
-   - Drag-and-drop support
-```
+### Models (YOLOv12)
+- `models/yolov12n-face.pt`: Nano (Best for Webcam/CPU).
+- `models/yolov12s-face.pt`: Small (Balanced).
+- `models/yolov12m-face.pt`: Medium (Best for Video).
+- `models/yolov12l-face.pt`: Large (Best for Static Images).
+  
+### Documentation Files
 
-### Deployment Files (Optional but Recommended)
-```
-✅ Dockerfile
-   - Docker containerization
-   - Based on Python 3.10-slim
-   - Installs system dependencies
-   - ~25 lines
-
-✅ docker-compose.yml
-   - Docker Compose configuration
-   - Health checks included
-   - Volume mounting for uploads
-   - ~20 lines
-
-✅ deploy.sh
-   - Linux/MacOS/HuggingFace deployment script
-   - Full system setup
-   - Nginx reverse proxy setup
-   - Supervisor configuration
-   - ~300 lines
-
-✅ deploy.bat
-   - Windows deployment script
-   - Virtual environment setup
-   - Gunicorn installation
-   - Browser auto-launch
-   - ~250 lines
-```
-
-### Documentation Files (Read These!)
-```
 ✅ WEB_QUICKSTART.md (START HERE)
    - 5-minute quick start
    - 3-step setup instructions
@@ -120,70 +85,58 @@
    - Quick reference guide
    - File descriptions
    - Recommended reading order
-```
-
-### Models (YOLOv12)
-```
-✅ models/yolov12n-face.pt (Nano)
-   - Fastest, Real-time (Best for Webcam)
-
-✅ models/yolov12s-face.pt (Small)
-   - Balanced Speed & Accuracy
-
-✅ models/yolov12m-face.pt (Medium)
-   - High Precision (Best for Video)
-
-✅ models/yolov12l-face.pt (Large)
-   - SOTA Accuracy (Best for Static Images)
-```
 
 ### Configuration Files
 ```
-✅ requirements.txt
-   - CPU-optimized PyTorch (--extra-index-url)
-   - ultralytics (Latest for v12 support)
-   - opencv-python-headless
-   - Flask>=2.3.0
-   - Werkzeug>=2.3.0
-   - All other dependencies intact
+- requirements.txt
+   + CPU-optimized PyTorch (--extra-index-url)
+   + ultralytics (Latest for v12 support)
+   + opencv-python-headless
+   + Flask>=2.3.0
+   + Werkzeug>=2.3.0
+   + All other dependencies intact
 ```
 
 ### Directory Structure
 ```
-human-face-detection/
-├── 🌐 WEB APPLICATION
-│   ├── web_app.py                    ⭐ Main Flask server
-│   └── templates/
-│       └── index.html                ⭐ Web UI
+Human_face_detection/
+├── 🤖 CI/CD & AUTOMATION (New)
+│   └── .github/workflows/
+│       └── docker-publish.yml      ⭐ GitHub Action to Auto-build Docker Image
 │
-├── 🐳 DOCKER DEPLOYMENT
-│   ├── Dockerfile                    Docker image config
-│   └── docker-compose.yml            Docker Compose setup
+├── ⚙️ DEPLOYMENT & CONFIG
+│   └── config/
+│       ├── Dockerfile              ⭐ Docker image config
+│       ├── docker-compose.yml      ⭐ Docker Compose setup
+│       ├── deploy.sh               Linux/macOS deployment script
+│       └── deploy.bat              Windows deployment script
 │
-├── 🚀 DEPLOYMENT SCRIPTS
-│   ├── deploy.sh                     Linux/macOS script
-│   └── deploy.bat                    Windows script
+├── 🌐 SOURCE CODE
+│   ├── src/
+│   │   ├── web_app.py              ⭐ Main Flask server (Port 7860)
+│   │   └── face_detection_yolov12.py  ⭐ YOLOv12 Detection Engine
+│   │
+│   └── web/templates/
+│       └── index.html              ⭐ Web UI
 │
-├── 📚 DOCUMENTATION
-│   ├── WEB_QUICKSTART.md             ⭐ Read first! (5 min)
-│   ├── WEB_SUMMARY.md                Architecture overview
-│   ├── WEB_README.md                 Complete reference
-│   ├── DEPLOYMENT_GUIDE.md           Detailed deployment
-│   ├── DEPLOYMENT_CHECKLIST.md       Pre-deployment checks
-│   └── DEPLOYMENT_GUIDE.txt          This file
+├── 🧠 MODELS (YOLOv12)
+│   └── models/
+│       ├── yolov12n-face.pt        Nano model (Best for Webcam)
+│       ├── yolov12s-face.pt        Small model
+│       ├── yolov12m-face.pt        Medium model
+│       └── yolov12l-face.pt        Large model
 │
-├── ⚙️ CONFIGURATION
-│   └── requirements.txt               Python dependencies
+├── 📚 DOCUMENTATION & META
+│   ├── README.md                   Main documentation
+│   ├── LICENSE                     AGPL v3 License
+│   ├── CODE_OF_CONDUCT.md          Community Guidelines
+│   ├── requirements.txt            Python dependencies
+│   ├── WEB_QUICKSTART.md           Quick start guide
+│   └── DEPLOYMENT_GUIDE.txt        This file
 │
-├── 💾 EXISTING APPLICATION
-│   ├── face_detection_yolov8.py      Original CLI app
-│   ├── yolov12n-face.pt              Nano model
-│   ├── yolov12s-face.pt              Small model
-│   ├── yolov12m-face.pt              Medium model
-│   └── yolov12l-face.pt              Large model
-│
-└── 📁 AUTO-CREATED DIRECTORIES
-    └── uploads/                      File upload storage
+└── 📁 RUNTIME STORAGE (Auto-created)
+    └── data/
+        └── uploads/                Temporary file storage
 ```
 
 ---
@@ -222,10 +175,9 @@ human-face-detection/
 - Model caching
 - File upload handling
 - Error handling
+- Size: ~300 lines
+-Depends on: face_detection_yolov12.py, Flask, Werkzeug
 ```
-
-**Size:** ~300 lines
-**Depends on:** face_detection_yolov12.py, Flask, Werkzeug
 
 ### templates/index.html (Web Interface)
 ```html
@@ -237,10 +189,9 @@ human-face-detection/
 - Responsive design
 - Mobile-friendly
 - JavaScript API integration
+- Size: ~800 lines
+- Dependencies: Bootstrap CSS, JavaScript ES6
 ```
-
-**Size:** ~800 lines
-**Dependencies:** Bootstrap CSS, JavaScript ES6
 
 ### docker-compose.yml
 ```yaml
@@ -250,9 +201,8 @@ human-face-detection/
 - Volume mounting
 - Health checks
 - Restart policy
+- Size: ~25 lines
 ```
-
-**Size:** ~25 lines
 
 ### deploy.sh (Linux Deployment)
 ```bash
@@ -263,10 +213,9 @@ human-face-detection/
 - Setup Supervisor
 - Gunicorn integration
 - Full production setup
+- Size: ~300 lines
+- Requires: root/sudo
 ```
-
-**Size:** ~300 lines
-**Requires:** root/sudo
 
 ### deploy.bat (Windows Deployment)
 ```batch
@@ -277,10 +226,9 @@ human-face-detection/
 - Port management
 - Auto-launch browser
 - Simple menu system
+- Size: ~250 lines
+- Requires: Administrator (optional)
 ```
-
-**Size:** ~250 lines
-**Requires:** Administrator (optional)
 
 ---
 
@@ -527,4 +475,5 @@ Before going live, ensure:
 **Created:** January 31, 2026
 **Version:** 2.0 (YOLOv12 Upgrade)
 **Status:** Production Ready ✅
+
 
