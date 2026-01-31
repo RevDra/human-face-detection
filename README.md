@@ -24,9 +24,9 @@ View the demo using this [link](https://revdra-yolov8-hfd.hf.space/), which I ha
 - Start/stop controls
 
 ### 🤖 Model Selection
-- **YOLOv8 Nano** (yolov8n_100e.pt) - Fastest, 30-60 FPS
+- **YOLOv8 Nano** (yolov8n_100e.pt) - Fastest
 - **YOLOv8 Medium** (yolov8m_200e.pt) - Balanced speed/accuracy
-- **YOLOv8 Large** (yolov8l_100e.pt) - Best accuracy, 5-15 FPS
+- **YOLOv8 Large** (yolov8l_100e.pt) - Best accuracy
 
 ## 🚀 Quick Start
 
