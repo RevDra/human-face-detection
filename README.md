@@ -71,24 +71,24 @@ Human_face_detection/
 ├── CODE_OF_CONDUCT.md                  # Community guidelines
 │
 ├── src/                                # Source code
-│   ├── web_app.py                     # Flask web server
-│   └── face_detection_yolov8.py       # YOLOv8 detection engine
+│   ├── web_app.py                       # Flask web server
+│   └── face_detection_yolov12.py        # YOLOv12 detection engine
 │
 ├── models/                             # YOLOv12 models
 │   ├── yolov12s-face.pt                 # YOLOv12 Small (Balanced)
 │   ├── yolov12n-face.pt                 # YOLOv12 Nano (fastest)
-|   └── MODELS.md                      # Instruction to download YOLOv12 Medium (yolov12m-face.pt) and Large (yolov12-face.pt)
+|   └── MODELS.md                        # Instruction to download YOLOv12 Medium (yolov12m-face.pt) and Large (yolov12-face.pt)
 │
 ├── web/                                # Web interface
 │   └── templates/
-│       └── index.html                 # Web UI (HTML/CSS/JS)
+│       └── index.html                   # Web UI (HTML/CSS/JS)
 │
 ├── config/                             # Configuration files
-    ├── Dockerfile                     # Docker configuration
-    ├── docker-compose.yml             # Docker compose setup
-    ├── deploy.sh                      # Linux deployment
-    ├── deploy.bat                     # Windows deployment
-    └── DEPLOYMENT_GUIDE.txt           # Deployment guide
+    ├── Dockerfile                       # Docker configuration
+    ├── docker-compose.yml               # Docker compose setup
+    ├── deploy.sh                        # Linux deployment
+    ├── deploy.bat                       # Windows deployment
+    └── DEPLOYMENT_GUIDE.txt             # Deployment guide
 
 ```
 
