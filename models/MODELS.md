@@ -57,6 +57,7 @@ cp YOLOv8-Face/models/yolov8*.pt ./models/
 Click the links below to download the files and place them into the models/ directory of this project.
 
 | Model | Size | Download Link |
+|-------|------|---------------|
 | Medium | ~40 MB | [yolo12m-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12m-face.pt) |
 | Large | ~53 MB | [yolo12l-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt) |
 
@@ -87,6 +88,7 @@ Once all models are downloaded, you can select them from the web interface:
 ## 📈 Model Comparison
 
 | Model | Suffix | Best Use Case | Inference Speed | Accuracy |
+|-------|--------|---------------|-----------------|----------|
 | Nano | n | Webcam | CPU | 🚀 Very Fast | ⭐⭐⭐
 | Small | s | Standard Video | 🚀 Fast | ⭐⭐⭐⭐
 | Medium | m | Analysis | GPU | 🐢 Moderate | ⭐⭐⭐⭐⭐
@@ -126,4 +128,5 @@ FileNotFoundError: Model not found: models/yolov8m_200e.pt
 ---
 
 **Note:** The medium and large models in this project are from the YOLOv8-Face repository, which are specifically optimized for face detection. For generic object detection models, refer to the official Ultralytics documentation.
+
 
