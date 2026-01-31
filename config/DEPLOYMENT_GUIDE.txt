@@ -1,11 +1,12 @@
-# 📋 Web Deployment - Files Created Summary
+# 📋 YOLOv12 Face Detection - Project Overview & Guide
 
 ## 🎯 Quick Reference
 
 ### 🚀 Start Here
 1. Read: **WEB_QUICKSTART.md** (5 min)
-2. Run: `python web_app.py`
-3. Visit: http://localhost:5000
+2. Run (Linux/Mac): `bash deploy.sh start`
+3. Run (Windows): `deploy.bat start`
+4. Visit: http://localhost:7860
 
 ---
 
@@ -13,14 +14,19 @@
 
 ### Core Application Files (Required)
 ```
-✅ web_app.py
+✅ src/web_app.py
    - Flask web server with REST API
+   - Optimized for Hugging Face Spaces (Port 7860)
    - Handles image/video uploads
    - Model caching for performance
    - Error handling and logging
    - ~300 lines, fully documented
 
-✅ templates/index.html
+✅ src/face_detection_yolov12.py
+   - YOLOv12 logic with Attention Mechanism
+   - Image & Video processing core
+
+✅ web/templates/index.html
    - Beautiful responsive UI
    - Image detection interface
    - Video detection interface
@@ -45,7 +51,7 @@
    - ~20 lines
 
 ✅ deploy.sh
-   - Linux/macOS deployment script
+   - Linux/MacOS/HuggingFace deployment script
    - Full system setup
    - Nginx reverse proxy setup
    - Supervisor configuration
@@ -116,17 +122,35 @@
    - Recommended reading order
 ```
 
-### Configuration Files (Updated)
+### Models (YOLOv12)
 ```
-✅ requirements.txt (UPDATED)
-   - Added Flask>=2.3.0
-   - Added Werkzeug>=2.3.0
+✅ models/yolov12n-face.pt (Nano)
+   - Fastest, Real-time (Best for Webcam)
+
+✅ models/yolov12s-face.pt (Small)
+   - Balanced Speed & Accuracy
+
+✅ models/yolov12m-face.pt (Medium)
+   - High Precision (Best for Video)
+
+✅ models/yolov12l-face.pt (Large)
+   - SOTA Accuracy (Best for Static Images)
+```
+
+### Configuration Files
+```
+✅ requirements.txt
+   - CPU-optimized PyTorch (--extra-index-url)
+   - ultralytics (Latest for v12 support)
+   - opencv-python-headless
+   - Flask>=2.3.0
+   - Werkzeug>=2.3.0
    - All other dependencies intact
 ```
 
 ### Directory Structure
 ```
-Human_face_detection/
+human-face-detection/
 ├── 🌐 WEB APPLICATION
 │   ├── web_app.py                    ⭐ Main Flask server
 │   └── templates/
@@ -153,9 +177,10 @@ Human_face_detection/
 │
 ├── 💾 EXISTING APPLICATION
 │   ├── face_detection_yolov8.py      Original CLI app
-│   ├── yolov8n_100e.pt               Nano model
-│   ├── yolov8m_200e.pt               Medium model
-│   └── yolov8l_100e.pt               Large model
+│   ├── yolov12n-face.pt              Nano model
+│   ├── yolov12s-face.pt              Small model
+│   ├── yolov12m-face.pt              Medium model
+│   └── yolov12l-face.pt              Large model
 │
 └── 📁 AUTO-CREATED DIRECTORIES
     └── uploads/                      File upload storage
@@ -167,7 +192,7 @@ Human_face_detection/
 
 ### For Quick Start (10 minutes)
 1. **WEB_QUICKSTART.md** - Get running in 3 steps
-2. Open web browser to http://localhost:5000
+2. Open web browser to http://localhost:7860
 3. Try uploading an image and video
 
 ### For Understanding (30 minutes)
@@ -185,7 +210,7 @@ Human_face_detection/
 
 ## 🎯 What Each File Does
 
-### web_app.py (Main Application)
+### src/web_app.py (Main Application)
 ```python
 # Key features:
 - Flask web server
@@ -200,13 +225,13 @@ Human_face_detection/
 ```
 
 **Size:** ~300 lines
-**Depends on:** face_detection_yolov8.py, Flask, Werkzeug
+**Depends on:** face_detection_yolov12.py, Flask, Werkzeug
 
 ### templates/index.html (Web Interface)
 ```html
 <!-- Features: -->
 - Beautiful gradient background
-- 3 main tabs (Image, Video, Info)
+- 4 main tabs (Image, Video, Webcam, Info)
 - Drag-and-drop file upload
 - Real-time progress indicators
 - Responsive design
@@ -262,10 +287,10 @@ Human_face_detection/
 ## 🔍 File Status
 
 ### ✅ Production Ready
-- web_app.py
+- src/web_app.py
 - templates/index.html
-- Dockerfile
-- docker-compose.yml
+- config/Dockerfile
+- config/docker-compose.yml
 - requirements.txt
 - All documentation
 
@@ -273,7 +298,7 @@ Human_face_detection/
 - File uploads (image, video)
 - API endpoints
 - Web interface
-- All 3 models
+- All 4 models
 
 ### ✅ Well Documented
 - Every function has docstrings
@@ -300,12 +325,21 @@ Human_face_detection/
 
 ---
 
+## 🎯 What's New in YOLOv12?
+
+This project uses the latest **YOLOv12** architecture, which introduces:
+* **Attention Mechanism:** Better focus on small faces and occluded features.
+* **FlashAttention:** Faster inference speed comparable to v8/v10.
+* **Zero-shot Generalization:** Improved performance in varying lighting conditions.
+
+---
+
 ## 🚀 Deployment Options
 
 ### Option 1: Local Development (Easiest)
 ```bash
 python web_app.py
-# Visit http://localhost:5000
+# Visit http://localhost:7860
 ```
 **Time:** 2 minutes
 **Cost:** Free
@@ -341,34 +375,21 @@ sudo bash deploy.sh deploy
 **Cost:** $5-50/month
 **Best for:** Reliability, scaling
 
+### Option 5: Hugging Face Spaces (Recommended)
+1. Create new Space (Docker SDK).
+2. Upload all files.
+3. Ensure `Dockerfile` is at root (or configured correctly).
+4. App runs automatically on port **7860**.
+
 ---
+## 🔧 API Endpoints
 
-## 🔧 Quick Configuration
-
-### Change Port
-```python
-# web_app.py line 298
-app.run(port=8000)  # was 5000
-```
-
-### Change Model Default
-```python
-# web_app.py line 50
-model = request.form.get('model', 'yolov8l_100e.pt')
-```
-
-### Change Upload Folder
-```python
-# web_app.py line 19
-UPLOAD_FOLDER = Path(...) / "my_uploads"
-```
-
-### Change File Size Limit
-```python
-# web_app.py line 21
-MAX_FILE_SIZE = 1000 * 1024 * 1024  # 1GB
-```
-
+| Method | Endpoint | Description |
+| POST | /api/detect-image | Upload image & get detection result (Base64) |
+| POST | /api/detect-video | Upload video & process frames |
+| GET | /api/models | Get list of available YOLOv12 models |
+| GET | /api/health | Server status check |
+| GET | /api/download/<file> | Download processed video/image |
 ---
 
 ## ✨ Features Summary
@@ -462,7 +483,7 @@ MAX_FILE_SIZE = 1000 * 1024 * 1024  # 1GB
 ## ✅ Pre-Launch Checklist
 
 Before going live, ensure:
-- [ ] All 3 models present
+- [ ] All 4 models present
 - [ ] Web interface tested
 - [ ] Image detection works
 - [ ] Video detection works
@@ -497,26 +518,11 @@ Before going live, ensure:
 |----------|------|
 | Flask Docs | https://flask.palletsprojects.com/ |
 | Gunicorn Docs | https://gunicorn.org/ |
-| YOLOv8 Docs | https://docs.ultralytics.com/ |
+| YOLOv12 Docs | https://docs.ultralytics.com/ |
 | Docker Docs | https://docs.docker.com/ |
 
 ---
 
-## 🎉 Summary
-
-You now have:
-✅ Complete web application
-✅ Beautiful responsive UI
-✅ REST API with 4 endpoints
-✅ Docker containerization
-✅ Deployment automation
-✅ Comprehensive documentation
-✅ Production-ready code
-
-**Next Step:** Run `python web_app.py` and visit http://localhost:5000
-
----
-
-**Created:** January 28, 2026
-**Version:** 1.0
+**Created:** January 31, 2026
+**Version:** 2.0 (YOLOv12 Upgrade)
 **Status:** Production Ready ✅
