@@ -13,7 +13,7 @@
 <br>
 
 A professional, real-time face detection system built with YOLOv12 and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy and speed.
-View the demo using this [link](https://revdra-yolov8-hfd.hf.space/).
+View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 
 ## ✨ Features
 
