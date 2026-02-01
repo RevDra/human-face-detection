@@ -6,6 +6,7 @@ Supports image upload, video upload, and live webcam streaming
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from pathlib import Path
+import os
 import cv2
 import numpy as np
 import base64
@@ -270,11 +271,14 @@ if __name__ == '__main__':
     print("   GET  /api/models          - Get available models")
     print("   GET  /api/health          - Health check")
     print("\n" + "="*70 + "\n")
+
+    # Determine debug mode from environment (default: disabled)
+    debug_mode = os.getenv("FLASK_ENV") == "development"
     
     # Run Flask app
     app.run(
         host='0.0.0.0',
         port=7860,
-        debug=True,
+        debug=debug_mode,
         use_reloader=False
     )
