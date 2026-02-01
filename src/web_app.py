@@ -10,6 +10,7 @@ import os
 import cv2
 import numpy as np
 import base64
+import logging
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
@@ -22,7 +23,12 @@ UPLOAD_FOLDER = PROJECT_ROOT / "data" / "uploads"
 MODELS_DIR = PROJECT_ROOT / "models"
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'avi', 'mov', 'mkv'}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
-
+ALLOWED_MODELS = {
+    'yolov12n-face.pt',
+    'yolov12s-face.pt',
+    'yolov12m-face.pt',
+    'yolov12l-face.pt'
+}
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -34,6 +40,9 @@ detector_cache = {}
 
 def get_detector(model_name):
     """Get or create detector instance (cached)"""
+    if model_name not in ALLOWED_MODELS:
+        logging.warning(f"Unsupported model request blocked: {model_name}")
+        raise ValueError(f"Unsupported model: {model_name}")
     if model_name not in detector_cache:
         model_path = MODELS_DIR / model_name
         if not model_path.exists():
@@ -81,6 +90,9 @@ def detect_image():
         
         # Get model selection
         model = request.form.get('model', 'yolov12l-face.pt')
+        if model not in ALLOWED_MODELS:
+            app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
+            model = 'yolov12l-face.pt'
         
         # Get detector
         detector = get_detector(model)
@@ -150,7 +162,10 @@ def detect_video():
         
         # Get model selection
         model = request.form.get('model', 'yolov12m-face.pt')
-        
+        if model not in ALLOWED_MODELS:
+            app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
+            model = 'yolov12m-face.pt'
+            
         # Save uploaded file
         filename = secure_filename(file.filename)
         input_path = UPLOAD_FOLDER / f"input_{filename}"
@@ -282,3 +297,4 @@ if __name__ == '__main__':
         debug=debug_mode,
         use_reloader=False
     )
+
