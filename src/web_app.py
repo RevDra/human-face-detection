@@ -188,7 +188,9 @@ def download_file(filename):
         
         return send_file(filepath, as_attachment=True)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # Log the full exception server-side without exposing details to the client
+        app.logger.exception("Error while processing download request for %s", filename)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/models', methods=['GET'])
