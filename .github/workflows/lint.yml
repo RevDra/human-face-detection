@@ -1,12 +1,12 @@
-name: Python Linting
+name: Python Quality Check (Black, isort, Mypy, Flake8)
 
 on: [push, pull_request]
 
 permissions:
-  contents: write  
+  contents: write
 
 jobs:
-  lint-and-fix:
+  quality-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -19,26 +19,30 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
-        run: pip install flake8 black
+      - name: Install tools
+        run: pip install black isort mypy flake8
+
+      - name: Run isort (Auto-fix)
+        run: isort .
 
       - name: Run Black (Auto-format)
-        run: black . 
+        run: black .
 
       - name: Check for changes and Commit
         run: |
           if [[ -n $(git status -s) ]]; then
-            echo "Phát hiện code chưa đẹp. Đang tự động sửa..."
-            
+            echo "Code not good, fixing..."
             git config --global user.name 'GitHub Actions'
             git config --global user.email 'actions@github.com'
-            
             git add .
-            git commit -m "style: auto-fix formatting with black"
+            git commit -m "style: auto-fix imports and formatting"
             git push
           else
-            echo "Nice code."
+            echo "Nice code!"
           fi
+
+      - name: Run Mypy (Type Check)
+        run: mypy .
 
       - name: Run Flake8
         run: |
