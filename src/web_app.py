@@ -3,14 +3,15 @@ Flask Web Application for YOLOv12 Face Detection
 Supports image upload, video upload, and live webcam streaming
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
-from werkzeug.utils import secure_filename
-from pathlib import Path
-import os
-import cv2
-import numpy as np
 import base64
 import logging
+import os
+from pathlib import Path
+
+import cv2
+import numpy as np
+from flask import Flask, jsonify, render_template, request, send_file
+from werkzeug.utils import secure_filename
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 

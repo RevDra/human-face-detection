@@ -14,12 +14,13 @@ try:
 except Exception:
     pass
 
-import cv2
-from pathlib import Path
-import tkinter as tk
-from tkinter import Label
-from PIL import Image, ImageTk
 import time
+import tkinter as tk
+from pathlib import Path
+from tkinter import Label
+
+import cv2
+from PIL import Image, ImageTk
 
 
 class YOLOv12FaceDetector:
