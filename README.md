@@ -79,7 +79,8 @@ Human_face_detection/
 │   │   └── feature_request.md          # Feature request template
 │   ├── workflows/
 │   │   └── docker-publish.yml          # Auto-build Docker Image
-│   └── dependabot.yml                  # Automated Dependency Updates
+│   ├── dependabot.yml                  # Automated Dependency Updates
+│   └── FUNDING.yml                     # Sponsor settings
 │
 ├── assets/                             # Project Images & Screenshots
 │   └── demo_ui.png                     # Interface preview for README
