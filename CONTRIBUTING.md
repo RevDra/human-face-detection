@@ -11,7 +11,7 @@ Since this repository uses **Strict Rulesets** and **CI/CD Pipelines**, you cann
 ### 1. Fork & Clone
 Fork the repository to your GitHub account, then clone it locally:
 ```bash
-git clone [https://github.com/YOUR_USERNAME/Human_face_detection.git](https://github.com/YOUR_USERNAME/Human_face_detection.git)
+git clone [https://github.com/RevDra/human-face-detection.git](https://github.com/RevDra/human-face-detection.git)
 cd Human_face_detection
 ```
 
