@@ -143,7 +143,8 @@ def detect_image():
         return jsonify(response)
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.exception("Error during image detection")
+        return jsonify({'error': 'Internal server error during image detection'}), 500
 
 
 @app.route('/api/detect-video', methods=['POST'])
