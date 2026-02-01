@@ -53,8 +53,10 @@
 ```
 Human_face_detection/
 ├── 🤖 CI/CD & AUTOMATION (New)
-│   └── .github/workflows/
-│       └── docker-publish.yml      ⭐ GitHub Action to Auto-build Docker Image
+│   └── .github/
+│       ├── workflows/
+│       │   └── docker-publish.yml      ⭐ GitHub Action to Auto-build Docker Image
+│       └── dependabot.yml              ⭐ Automated Dependency Updates
 │
 ├── ⚙️ DEPLOYMENT & CONFIG
 │   └── config/
@@ -83,8 +85,7 @@ Human_face_detection/
 │   ├── LICENSE                     AGPL v3 License
 │   ├── CODE_OF_CONDUCT.md          Community Guidelines
 │   ├── requirements.txt            Python dependencies
-│   ├── WEB_QUICKSTART.md           Quick start guide
-│   └── DEPLOYMENT_GUIDE.txt        This file
+│   └── DEPLOYMENT_GUIDE.md        This file
 │
 └── 📁 RUNTIME STORAGE (Auto-created)
     └── data/
@@ -380,3 +381,4 @@ Before going live, ensure:
 **Created:** January 31, 2026
 **Version:** 2.0 (YOLOv12 Upgrade)
 **Status:** Production Ready ✅
+
