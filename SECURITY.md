@@ -6,8 +6,8 @@ Only the latest stable release is currently supported with security updates.
 
 | Version | Supported          | Notes |
 | :-----: | :----------------: | :---- |
-| **1.0.x** | :white_check_mark: | Current Stable Release (YOLOv12) |
-| < 1.0   | :x:                | Old development versions |
+| **1.1.x** | :white_check_mark: | **Current Stable & Secure** (Docker Support) |
+| 1.0.x   | :x:                | Vulnerable (Please upgrade immediately) |
 
 ## 🐞 Reporting a Vulnerability
 
