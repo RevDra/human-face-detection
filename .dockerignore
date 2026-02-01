@@ -1,0 +1,48 @@
+# 1. Version Control & CI/CD
+.git
+.github
+.gitignore
+.dockerignore
+
+# 2. Python & Virtual Environment
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 3. Environment Variables & Secrets
+.env
+.env.local
+.env.*
+
+# 4. Project Documentation & Configs
+assets/
+docs/
+*.md
+LICENSE
+.flake8
+dependabot.yml
+FUNDING.yml
+
+# 5. IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 6. Docker & Deployment Scripts
+Dockerfile
+docker-compose.yml
+config/deploy.sh
+config/deploy.bat
+config/DEPLOYMENT_GUIDE.md
+
+# 7. Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints
