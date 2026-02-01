@@ -78,7 +78,8 @@ Human_face_detection/
 │   │   ├── config.yml                  # Discussions link config
 │   │   └── feature_request.md          # Feature request template
 │   ├── workflows/
-│   │   └── docker-publish.yml          # Auto-build Docker Image
+│   │   ├── docker-publish.yml          # Auto-build Docker Image
+│   │   └── lint.yml                    # Flake8 file
 │   ├── dependabot.yml                  # Automated Dependency Updates
 │   └── FUNDING.yml                     # Sponsor settings
 │
@@ -105,6 +106,9 @@ Human_face_detection/
 │   └── templates/
 │       └── index.html                  # Web UI
 │
+├── .flake8                             # Config Flake8 rules
+├── .dockerignore                       # Docker Ignore
+├── .gitignore                          # Git Ignore
 ├── CODE_OF_CONDUCT.md                  # Community guidelines
 ├── CONTRIBUTING.md                     # Contribution guidelines
 ├── LICENSE                             # AGPL v3 License
