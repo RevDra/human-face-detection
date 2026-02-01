@@ -1,6 +1,8 @@
 name: Python Linting (Flake8)
 
 on: [push, pull_request]
+permissions:
+  contents: read
 
 jobs:
   flake8-lint:
