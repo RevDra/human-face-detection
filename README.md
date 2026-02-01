@@ -6,16 +6,6 @@
 [![Docker](https://img.shields.io/badge/docker-supported-2496ED?logo=docker&logoColor=white)](config/Dockerfile)
 [![Build Status](https://github.com/RevDra/human-face-detection/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/RevDra/human-face-detection/actions/workflows/docker-publish.yml)
 
-
-<div align="center">
-
-# Human Face Detection (YOLOv12)
-### A Dockerized Flask Application for Real-time Face Detection
-
-<a href="https://www.buymeacoffee.com/luongminhngoc"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=luongminhngoc&button_colour=5F7FFF&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" /></a>
-
-</div>
-
 <br>
 <div align="center">
   <img src="assets/demo_ui.png" alt="YOLOv12 Face Detection Interface" width="100%">
@@ -264,6 +254,11 @@ This project uses the following open-source components:
       
 **Project License:**
 This entire project is licensed under the AGPL-3.0 to comply with the licensing terms of the YOLO ecosystem.
+
+## 💬 Support & Q&A
+
+Have a question? Don't hesitate to [![ask](https://img.shields.io/badge/Ask%20a%20Question-GitHub%20Discussions-blue?style=for-the-badge&logo=github)](https://github.com/RevDra/human-face-detection/discussions)!
+
 ---
 
 **Last Updated:** February 1, 2026 |
