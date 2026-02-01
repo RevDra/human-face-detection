@@ -79,7 +79,8 @@ Human_face_detection/
 │   │   └── feature_request.md          # Feature request template
 │   ├── workflows/
 │   │   └── docker-publish.yml          # Auto-build Docker Image
-│   └── dependabot.yml                  # Automated Dependency Updates
+│   ├── dependabot.yml                  # Automated Dependency Updates
+│   └── FUNDING.yml                     # Sponsor settings
 │
 ├── assets/                             # Project Images & Screenshots
 │   └── demo_ui.png                     # Interface preview for README
@@ -254,6 +255,12 @@ This project uses the following open-source components:
       
 **Project License:**
 This entire project is licensed under the AGPL-3.0 to comply with the licensing terms of the YOLO ecosystem.
+
+## 💬 Support & Q&A
+
+[![Have a question?](https://img.shields.io/badge/Ask%20a%20Question-GitHub%20Discussions-blue?style=for-the-badge&logo=github)](https://github.com/RevDra/human-face-detection/discussions)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/luongminhngoc)
+
 ---
 
 **Last Updated:** February 1, 2026 |
