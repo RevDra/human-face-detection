@@ -191,7 +191,9 @@ def detect_video():
         return jsonify(response)
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # Log the full exception server-side without exposing details to the client
+        app.logger.exception("Error while processing video detection request")
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/download/<filename>', methods=['GET'])
