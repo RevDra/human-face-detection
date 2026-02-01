@@ -112,6 +112,25 @@ Human_face_detection/
 └── requirements.txt                    # Python dependencies
 ```
 
+## 🐳 Docker Support (Recommended)
+You can run the application instantly without installing Python or dependencies manually.
+
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop) installed.
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/](https://github.com/)RevDra/human-face-detection.git
+   cd Human_face_detection
+   ```
+   
+2. **Run with Docker Compose:**
+   ```bash
+   docker-compose up --build
+   ```
+   
+3. **Access the App:**
+   Open `http://localhost:7860` in your browser.
+
 ## 🔧 API Endpoints
 
 | Method | Endpoint | Description |
