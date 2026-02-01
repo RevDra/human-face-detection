@@ -11,12 +11,20 @@ Only the latest stable release is currently supported with security updates.
 
 ## 🐞 Reporting a Vulnerability
 
-We take the security of this project seriously. If you find a vulnerability, please follow these steps:
+We take the security of this project seriously. If you find a vulnerability, please follow the guidelines below.
 
-### How to Report
-**DO NOT** open a public issue on GitHub for sensitive security vulnerabilities. Publicly disclosing a vulnerability can put the entire community at risk.
+### 🚫 DO NOT open Public Issues
+**Never** report security vulnerabilities via public GitHub issues. Publicly disclosing a vulnerability can put the entire community at risk before a fix is available.
 
-Instead, please send an email to: **[YOUR_EMAIL]@gmail.com**
+### ✅ Preferred Method (Private Reporting)
+We strongly encourage you to use GitHub's **Private Vulnerability Reporting** feature. This allows us to collaborate on a fix in a secure, private environment.
+
+1. Go to the **Security** tab of this repository.
+2. Click on the **Report a vulnerability** button.
+3. Fill in the details (Description, Impact, Steps to reproduce).
+
+### 📧 Alternative Method (Email)
+If you are unable to use the GitHub reporting tool, you can send an email to: **luongminhngoc0@gmail.com**
 
 Please include:
 * Description of the vulnerability.
@@ -24,8 +32,8 @@ Please include:
 * Potential impact.
 
 ### What to Expect
-* I will acknowledge your email within **48 hours**.
-* I will verify the issue and keep you updated on the progress.
+* We will acknowledge your report within **48 hours**.
+* We will verify the issue and keep you updated on the progress.
 * Once fixed, a patch will be released, and you will be credited (if you wish) in the release notes.
 
 ## 🔒 Security Scope
