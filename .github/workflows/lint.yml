@@ -1,11 +1,11 @@
-name: Python Linting (Flake8)
+name: Python Linting (Black & Flake8)
 
 on: [push, pull_request]
 permissions:
   contents: read
 
 jobs:
-  flake8-lint:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,12 +16,15 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Flake8
-        run: pip install flake8
+      - name: Install dependencies
+        run: pip install flake8 black 
+
+      - name: Check formatting with Black
+        run: black . --check 
 
       - name: Run Flake8
         run: |
-          # Kiểm tra các lỗi nghiêm trọng (Syntax, Logic)
+          # Check errors (Syntax, Logic)
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Cảnh báo các lỗi phong cách (Style)
+          # Warnings (Style)
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
