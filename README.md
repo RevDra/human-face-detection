@@ -72,35 +72,44 @@ https://localhost:7860
 
 ```
 Human_face_detection/
-├── .github/                            # Github Actions (CI/CD)
-│   └── workflows/
-│       └── docker-publish.yml          # Auto-build & Publish Docker Image
+├── .github/                            # CI/CD & Automation
+│   ├── ISSUE_TEMPLATE/                 # Community Forms
+│   │   ├── bug_report.md               # Bug report template
+│   │   ├── config.yml                  # Discussions link config
+│   │   └── feature_request.md          # Feature request template
+│   ├── workflows/
+│   │   └── docker-publish.yml          # Auto-build Docker Image
 │   └── dependabot.yml                  # Automated Dependency Updates
 │
-├── LICENSE                             # AGPL v3 License
-├── CODE_OF_CONDUCT.md                  # Community guidelines
-├── README.md                           # Main documentation
-├── requirements.txt                    # Python dependencies
+├── assets/                             # Project Images & Screenshots
+│   └── demo_ui.png                     # Interface preview for README
 │
-├── src/                                # Source code
-│   ├── web_app.py                       # Flask web server
-│   └── face_detection_yolov12.py        # YOLOv12 detection engine
+├── config/                             # Configuration & Deployment scripts
+│   ├── Dockerfile                      # Docker image config
+│   ├── docker-compose.yml              # Docker Compose setup
+│   ├── deploy.sh                       # Linux deployment script
+│   ├── deploy.bat                      # Windows deployment script
+│   └── DEPLOYMENT_GUIDE.md             # Detailed deployment guide
 │
-├── models/                             # YOLOv12 models
-│   ├── yolov12s-face.pt                 # YOLOv12 Small (Balanced)
-│   ├── yolov12n-face.pt                 # YOLOv12 Nano (fastest)
-|   └── MODELS.md                        # Instruction to download YOLOv12 Medium (yolov12m-face.pt) and Large (yolov12-face.pt)
+├── models/                             # YOLOv12 Models
+│   ├── yolov12n-face.pt                # Nano model (Fastest)
+│   ├── yolov12s-face.pt                # Small model (Balanced)
+│   └── MODELS.md                       # Download instructions for Med/Large models
 │
-├── web/                                # Web interface
+├── src/                                # Source Code
+│   ├── web_app.py                      # Flask web server
+│   └── face_detection_yolov12.py       # YOLOv12 detection engine
+│
+├── web/                                # Frontend Assets
 │   └── templates/
-│       └── index.html                   # Web UI (HTML/CSS/JS)
+│       └── index.html                  # Web UI
 │
-├── config/                             # Configuration files
-    ├── Dockerfile                       # Docker configuration
-    ├── docker-compose.yml               # Docker compose setup
-    ├── deploy.sh                        # Linux deployment
-    ├── deploy.bat                       # Windows deployment
-    └── DEPLOYMENT_GUIDE.txt             # Deployment guide
+├── CODE_OF_CONDUCT.md                  # Community guidelines
+├── CONTRIBUTING.md                     # Contribution guidelines
+├── LICENSE                             # AGPL v3 License
+├── README.md                           # Main documentation
+├── SECURITY.md                         # Security policy
+└── requirements.txt                    # Python dependencies
 ```
 
 ## 🔧 API Endpoints
