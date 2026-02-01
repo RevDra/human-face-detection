@@ -6,6 +6,12 @@
 [![Docker](https://img.shields.io/badge/docker-supported-2496ED?logo=docker&logoColor=white)](config/Dockerfile)
 [![Build Status](https://github.com/RevDra/human-face-detection/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/RevDra/human-face-detection/actions/workflows/docker-publish.yml)
 
+<br>
+<div align="center">
+  <img src="assets/demo_ui.png" alt="YOLOv12 Face Detection Interface" width="100%">
+</div>
+<br>
+
 A professional, real-time face detection system built with YOLOv12 and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy and speed.
 View the demo using this [link](https://revdra-yolov8-hfd.hf.space/).
 
