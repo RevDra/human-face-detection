@@ -107,6 +107,7 @@ Human_face_detection/
 │       └── index.html                  # Web UI
 │
 ├── .flake8                             # Config Flake8 rules
+├── .dockerignore
 ├── CODE_OF_CONDUCT.md                  # Community guidelines
 ├── CONTRIBUTING.md                     # Contribution guidelines
 ├── LICENSE                             # AGPL v3 License
