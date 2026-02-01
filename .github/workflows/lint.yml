@@ -1,15 +1,18 @@
-name: Python Linting (Black & Flake8)
+name: Python Linting
 
 on: [push, pull_request]
+
 permissions:
-  contents: read
+  contents: write  
 
 jobs:
-  lint:
+  lint-and-fix:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -19,12 +22,25 @@ jobs:
       - name: Install dependencies
         run: pip install flake8 black
 
-      - name: Check formatting with Black
-        run: black . --check 
+      - name: Run Black (Auto-format)
+        run: black . 
+
+      - name: Check for changes and Commit
+        run: |
+          if [[ -n $(git status -s) ]]; then
+            echo "Phát hiện code chưa đẹp. Đang tự động sửa..."
+            
+            git config --global user.name 'GitHub Actions'
+            git config --global user.email 'actions@github.com'
+            
+            git add .
+            git commit -m "style: auto-fix formatting with black"
+            git push
+          else
+            echo "Nice code."
+          fi
 
       - name: Run Flake8
         run: |
-          # Kiểm tra các lỗi nghiêm trọng (Syntax, Logic)
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Cảnh báo các lỗi phong cách (Style)
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
