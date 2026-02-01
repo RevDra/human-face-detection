@@ -40,15 +40,33 @@ detector_cache = {}
 
 def get_detector(model_name):
     """Get or create detector instance (cached)"""
-    if model_name not in ALLOWED_MODELS:
-        logging.warning(f"Unsupported model request blocked: {model_name}")
-        raise ValueError(f"Unsupported model: {model_name}")
-    if model_name not in detector_cache:
-        model_path = MODELS_DIR / model_name
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found: {model_path}")
-        detector_cache[model_name] = YOLOv12FaceDetector(str(model_path))
-    return detector_cache[model_name]
+    safe_name = secure_filename(model_name)
+
+    if safe_name not in ALLOWED_MODELS:
+        logging.error(f"Attempt to load unsupported model: {safe_name}")
+        raise ValueError(f"Unsupported model: {safe_name}")
+
+    if safe_name not in detector_cache:
+        model_path = MODELS_DIR / safe_name
+
+        try:
+            final_path = model_path.resolve()
+            safe_root = MODELS_DIR.resolve()
+            if not str(final_path).startswith(str(safe_root)):
+                logging.error(f"Security Alert: Symlink attack detected! {final_path}")
+                raise ValueError("Invalid model path (Symlink violation)")
+                
+        except Exception as e:
+            logging.error(f"Error resolving model path: {str(e)}")
+            raise FileNotFoundError(f"Model path error: {str(e)}")
+
+        if not final_path.exists():
+            logging.error(f"Model file not found: {final_path}")
+            raise FileNotFoundError(f"Model not found: {final_path}")
+
+        detector_cache[safe_name] = YOLOv12FaceDetector(str(final_path))
+        
+    return detector_cache[safe_name]
 
 
 def allowed_file(filename):
@@ -300,4 +318,5 @@ if __name__ == '__main__':
         debug=debug_mode,
         use_reloader=False
     )
+
 
