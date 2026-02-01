@@ -69,6 +69,7 @@ Human_face_detection/
 ├── .github/                            # Github Actions (CI/CD)
 │   └── workflows/
 │       └── docker-publish.yml          # Auto-build & Publish Docker Image
+│   └── dependabot.yml                  # Automated Dependency Updates
 │
 ├── LICENSE                             # AGPL v3 License
 ├── CODE_OF_CONDUCT.md                  # Community guidelines
