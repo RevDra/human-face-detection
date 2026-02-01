@@ -118,15 +118,20 @@ You can run the application instantly without installing Python or dependencies 
 **Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop) installed.
 
 1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/](https://github.com/)RevDra/human-face-detection.git
-   cd Human_face_detection
-   ```
+```bash
+git clone [https://github.com/](https://github.com/)RevDra/human-face-detection.git
+cd Human_face_detection
+```
    
 2. **Run with Docker Compose:**
-   ```bash
-   docker-compose up --build
-   ```
+```bash
+# Build and run with Docker Compose (from project root)
+docker-compose -f config/docker-compose.yml up --build
+
+# Or build manually
+docker build -t yolov12-face-detection -f config/Dockerfile .
+docker run -p 7860:7860 -v $(pwd)/data:/app/data yolov12-face-detection
+```
    
 3. **Access the App:**
    Open `http://localhost:7860` in your browser.
@@ -163,17 +168,6 @@ with open('image.jpg', 'rb') as f:
     result = response.json()
     
 print(f"Detected {result['detections']['count']} faces")
-```
-
-## 🐳 Docker Deployment
-
-```bash
-# Build and run with Docker Compose (from project root)
-docker-compose -f config/docker-compose.yml up --build
-
-# Or build manually
-docker build -t yolov8-face-detection -f config/Dockerfile .
-docker run -p 5000:5000 -v $(pwd)/data:/app/data yolov8-face-detection
 ```
 
 ## 📊 Detection Details
