@@ -79,7 +79,7 @@ Human_face_detection/
 │   │   └── feature_request.md          # Feature request template
 │   ├── workflows/
 │   │   ├── docker-publish.yml          # Auto-build Docker Image
-│   │   └── lint.yml                    # Flake8 file
+│   │   └── lint.yml                    # Quality Check (Black + Flake8)
 │   ├── dependabot.yml                  # Automated Dependency Updates
 │   └── FUNDING.yml                     # Sponsor settings
 │
@@ -106,9 +106,11 @@ Human_face_detection/
 │   └── templates/
 │       └── index.html                  # Web UI
 │
-├── .flake8                             # Config Flake8 rules
+├── .flake8                             # Flake8 Configuration
 ├── .dockerignore                       # Docker Ignore
 ├── .gitignore                          # Git Ignore
+├── .gitattributes                      # Normalized code (LF)
+├── pyproject.toml                      # Black Configuration
 ├── CODE_OF_CONDUCT.md                  # Community guidelines
 ├── CONTRIBUTING.md                     # Contribution guidelines
 ├── LICENSE                             # AGPL v3 License
