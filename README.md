@@ -79,8 +79,7 @@ Human_face_detection/
 │   │   └── feature_request.md          # Feature request template
 │   ├── workflows/
 │   │   ├── docker-publish.yml          # Auto-build Docker Image
-│   │   ├── lint.yml                    # Quality Check (Black + Flake8)
-│   │   └── codeql.yml                  # Security Scanning
+│   │   └── lint.yml                    # Quality Check (Black + Flake8)
 │   ├── dependabot.yml                  # Automated Dependency Updates
 │   └── FUNDING.yml                     # Sponsor settings
 │
