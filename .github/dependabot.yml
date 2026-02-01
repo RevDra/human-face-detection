@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # 1. Quản lý thư viện Python (pip)
+  - package-ecosystem: "pip"
+    directory: "/" # Nơi chứa requirements.txt
+    schedule:
+      interval: "weekly" # Chỉ check 1 tuần/lần cho đỡ phiền
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Tùy chọn: Bỏ qua các bản cập nhật lớn của torch để tránh lỗi
+    # ignore:
+    #   - dependency-name: "torch"
+    #     update-types: ["version-update:semver-major"]
+
+  # 2. Quản lý Docker Base Image
+  - package-ecosystem: "docker"
+    directory: "/config" # Nơi chứa Dockerfile
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
