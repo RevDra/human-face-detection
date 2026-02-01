@@ -124,9 +124,7 @@ def detect_image():
         is_webcam = "webcam" in file.filename.lower()
         if is_webcam:
             # Use optimized detection for speed
-            detections = detector.detect_faces_optimized(
-                image, conf_threshold=0.35, max_width=480
-            )
+            detections = detector.detect_faces_optimized(image, conf_threshold=0.35, max_width=480)
         else:
             # Use standard detection for uploaded files
             detections = detector.detect_faces(image, conf_threshold=0.35)

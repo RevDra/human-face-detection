@@ -107,9 +107,7 @@ class YOLOv12FaceDetector:
             print(f"Detection error: {e}")
         return detections
 
-    def draw_faces(
-        self, image, detections, color=(0, 255, 0), thickness=2, show_confidence=True
-    ):
+    def draw_faces(self, image, detections, color=(0, 255, 0), thickness=2, show_confidence=True):
         result = image.copy()
         for det in detections:
             x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
@@ -140,9 +138,7 @@ class YOLOv12FaceDetector:
 
 # --- GUI Class (Webcam) ---
 class WebcamFaceDetectionGUI:
-    def __init__(
-        self, model_path, conf_threshold=0.5, skip_frames=2, inference_width=640
-    ):
+    def __init__(self, model_path, conf_threshold=0.5, skip_frames=2, inference_width=640):
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.skip_frames = skip_frames
@@ -224,9 +220,7 @@ class WebcamFaceDetectionGUI:
             self.current_detections = detections
             self.detection_count += 1
             if time.time() - self.last_detection_time >= 1.0:
-                self.detection_fps = self.detection_count / (
-                    time.time() - self.last_detection_time
-                )
+                self.detection_fps = self.detection_count / (time.time() - self.last_detection_time)
                 self.detection_count = 0
                 self.last_detection_time = time.time()
         else:
@@ -253,10 +247,10 @@ class WebcamFaceDetectionGUI:
             self.frame_count = 0
             self.last_time = time.time()
 
-        info_text = f"FPS: {self.fps:.1f} | Det FPS: {self.detection_fps:.1f} | Faces: {len(detections)}"
-        cv2.putText(
-            result, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2
+        info_text = (
+            f"FPS: {self.fps:.1f} | Det FPS: {self.detection_fps:.1f} | Faces: {len(detections)}"
         )
+        cv2.putText(result, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
         h, w = result.shape[:2]
         display_w = 1000
@@ -286,9 +280,7 @@ class WebcamFaceDetectionGUI:
 def webcam_detection_with_display(
     model_path, conf_threshold=0.5, skip_frames=2, inference_width=640
 ):
-    gui = WebcamFaceDetectionGUI(
-        model_path, conf_threshold, skip_frames, inference_width
-    )
+    gui = WebcamFaceDetectionGUI(model_path, conf_threshold, skip_frames, inference_width)
     gui.run()
 
 
@@ -303,9 +295,7 @@ def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0
 
     detector = YOLOv12FaceDetector(model_path)
     writer = (
-        cv2.VideoWriter(
-            str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
-        )
+        cv2.VideoWriter(str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
         if output_path
         else None
     )
@@ -392,9 +382,7 @@ def select_model_level(script_dir):
 def choose_and_process_file(script_dir):
     while True:
         print("\n" + "█" * 70)
-        print(
-            "█" + "  YOLOv12 Face Detection System - ADVANCED MODE  ".center(68) + "█"
-        )
+        print("█" + "  YOLOv12 Face Detection System - ADVANCED MODE  ".center(68) + "█")
         print("█" * 70)
         print("  1) WEBCAM        (Live Detection)")
         print("  2) VIDEO FILE    (Process Video)")
@@ -413,17 +401,13 @@ def choose_and_process_file(script_dir):
             if task_choice == "1":
                 is_heavy = "l-face" in model_path or "m-face" in model_path
                 skip = 3 if is_heavy else 1
-                webcam_detection_with_display(
-                    model_path, conf_threshold=0.35, skip_frames=skip
-                )
+                webcam_detection_with_display(model_path, conf_threshold=0.35, skip_frames=skip)
             elif task_choice == "2":
                 video_path = input("\n  >> Path to video file: ").strip().strip("\"'")
                 detect_from_video(video_path, model_path, "output_video.mp4", 0.35)
             elif task_choice == "3":
                 image_path = input("\n  >> Path to image file: ").strip().strip("\"'")
-                result, _ = detect_from_image(
-                    image_path, model_path, "output_image.jpg", 0.35
-                )
+                result, _ = detect_from_image(image_path, model_path, "output_image.jpg", 0.35)
                 if result is not None:
                     display_image_with_detections(result)
         else:
@@ -449,9 +433,7 @@ if __name__ == "__main__":
             print(f"  [MISSING] {m}")
 
     if not found_any:
-        print(
-            "\nERROR: No YOLOv12 models found! Please place .pt files in this folder."
-        )
+        print("\nERROR: No YOLOv12 models found! Please place .pt files in this folder.")
     else:
         try:
             choose_and_process_file(script_dir)
