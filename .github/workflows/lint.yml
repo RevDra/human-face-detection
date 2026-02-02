@@ -1,4 +1,4 @@
-name: Python Quality Check (Black, isort, Mypy, Flake8, Pytest)
+name: Python Quality Check
 
 on: [push, pull_request]
 
