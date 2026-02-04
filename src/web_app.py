@@ -3,17 +3,18 @@ Flask Web Application for YOLOv12 Face Detection
 Supports image upload, video upload, and live webcam streaming
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_limiter.errors import RateLimitExceeded
-from werkzeug.utils import secure_filename
-from pathlib import Path
-import os
-import cv2
-import numpy as np
 import base64
 import logging
+import os
+from pathlib import Path
+
+import cv2
+import numpy as np
+from flask import Flask, jsonify, render_template, request, send_file
+from flask_limiter import Limiter
+from flask_limiter.errors import RateLimitExceeded
+from flask_limiter.util import get_remote_address
+from werkzeug.utils import secure_filename
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
@@ -41,7 +42,7 @@ limiter = Limiter(
     key_func=get_remote_address,
     app=app,
     default_limits=["1000 per day", "100 per hour"],
-    storage_uri="memory://"
+    storage_uri="memory://",
 )
 
 # Model cache
@@ -95,6 +96,7 @@ def is_video(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+
 @app.route("/")
 def index():
     """Main page"""
@@ -134,9 +136,7 @@ def detect_image():
         is_webcam = "webcam" in file.filename.lower()
         if is_webcam:
             # Use optimized detection for speed
-            detections = detector.detect_faces_optimized(
-                image, conf_threshold=0.35, max_width=480
-            )
+            detections = detector.detect_faces_optimized(image, conf_threshold=0.35, max_width=480)
         else:
             # Use standard detection for uploaded files
             detections = detector.detect_faces(image, conf_threshold=0.35)
@@ -305,14 +305,21 @@ def internal_error(error):
     """Handle internal server error"""
     return jsonify({"error": "Internal server error"}), 500
 
+
 @app.errorhandler(RateLimitExceeded)
 def handle_rate_limit_error(e):
     """Handle rate limit exceeded errors"""
     app.logger.warning(f"Rate limit exceeded: {e.description}")
-    return jsonify({
-        "error": "Too many requests",
-        "message": f"Too fast! Please wait a moment. ({e.description})"
-    }), 429
+    return (
+        jsonify(
+            {
+                "error": "Too many requests",
+                "message": f"Too fast! Please wait a moment. ({e.description})",
+            }
+        ),
+        429,
+    )
+
 
 if __name__ == "__main__":
     print("\n" + "=" * 70)
