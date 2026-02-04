@@ -242,7 +242,7 @@ FileNotFoundError: Model not found: models/yolov12m-face.pt
 ## 📚 References
 
 - [Model Setup Guide](models/MODELS.md) - Download and setup instructions
-- [YOLOv8-Face Repository](https://github.com/YapaLab/yolo-face) - Source of the models/weights.
+- [YOLOv12-Face Repository](https://github.com/YapaLab/yolo-face) - Source of the models/weights.
 - [Ultralytics YOLOv12](https://docs.ultralytics.com/) - YOLOv12 documentation.
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [OpenCV Documentation](https://docs.opencv.org/)
