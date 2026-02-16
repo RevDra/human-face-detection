@@ -43,14 +43,6 @@ wget [https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12m-face
 
 # Download Large Model
 wget [https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt) -P models/
-
-### Option 2: Clone from Original Repository
-```bash
-# Clone the YOLOv8-Face repository
-git clone https://github.com/Yusepp/YOLOv8-Face.git
-
-# Copy models to your project
-cp YOLOv8-Face/models/yolov8*.pt ./models/
 ```
 
 ### Option 2: Direct Download (Manual)
