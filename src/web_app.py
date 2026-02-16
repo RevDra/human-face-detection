@@ -11,6 +11,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 from flask import Flask, jsonify, render_template, request, send_file
+from flask_limiter import Limiter
+from flask_limiter.errors import RateLimitExceeded
+from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
@@ -34,6 +37,13 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=["1000 per day", "100 per hour"],
+    storage_uri="memory://",
+)
 
 # Model cache
 detector_cache = {}
@@ -94,6 +104,7 @@ def index():
 
 
 @app.route("/api/detect-image", methods=["POST"])
+@limiter.limit("15 per minute")
 def detect_image():
     """Detect faces in uploaded image"""
     try:
@@ -167,6 +178,7 @@ def detect_image():
 
 
 @app.route("/api/detect-video", methods=["POST"])
+@limiter.limit("5 per hour")
 def detect_video():
     """Detect faces in uploaded video"""
     try:
@@ -294,11 +306,26 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit_error(e):
+    """Handle rate limit exceeded errors"""
+    app.logger.warning(f"Rate limit exceeded: {e.description}")
+    return (
+        jsonify(
+            {
+                "error": "Too many requests",
+                "message": f"Too fast! Please wait a moment. ({e.description})",
+            }
+        ),
+        429,
+    )
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("🌐 Starting YOLOv12 Face Detection Web Server")
     print("=" * 70)
-    print("\n📍 Server: http://localhost:5000")
+    print("\n📍 Server: http://localhost:7860")
     print("📁 Upload folder: ", UPLOAD_FOLDER)
     print("🔧 Models folder: ", MODELS_DIR)
     print("\n🎯 Available endpoints:")
