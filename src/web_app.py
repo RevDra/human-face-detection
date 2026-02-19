@@ -17,6 +17,7 @@ from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy.model import Model
 from sqlalchemy.exc import OperationalError
 from werkzeug.utils import secure_filename
 
@@ -61,7 +62,7 @@ limiter = Limiter(
 detector_cache = {}
 
 
-class Feedback(db.Model):
+class Feedback(db.Model): # type: ignore
     __tablename__ = "feedbacks"
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255))
