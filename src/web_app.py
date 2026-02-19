@@ -62,7 +62,7 @@ limiter = Limiter(
 detector_cache = {}
 
 
-class Feedback(db.Model): # type: ignore
+class Feedback(db.Model):  # type: ignore
     __tablename__ = "feedbacks"
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255))
