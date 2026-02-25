@@ -6,8 +6,9 @@ Only the latest stable release is currently supported with security updates.
 
 | Version | Supported          | Notes |
 | :-----: | :----------------: | :---- |
-| **1.1.x** | :white_check_mark: | **Current Stable & Secure** (Docker Support) |
-| 1.0.x   | :x:                | Vulnerable (Please upgrade immediately) |
+| **1.2.x** | :white_check_mark: | **Current Stable & Secure** (Training Pipeline, Secure Env, API, Docker) |
+| 1.1.x   | :warning:          | Deprecated (No active security updates, please upgrade) |
+| 1.0.x   | :x:                | Vulnerable / Unsupported |
 
 ## 🐞 Reporting a Vulnerability
 
