@@ -1,6 +1,6 @@
 # 📦 YOLOv12 Face Detection Models
 
-This folder contains the **YOLOv12** models optimized for Human Face Detection.
+This folder contains the **YOLOv12** models optimized for Human Face Detection, along with the source code and benchmark results from the training process on the WIDER FACE dataset.
 
 ## 📊 Available Models
 
@@ -30,6 +30,53 @@ Due to file size limits, the heavier models must be downloaded manually or via s
 
 ---
 
+## 📂 Directory Structure & Artifacts
+
+The `models/` directory is organized to separate the deployment weights from the training and evaluation artifacts:
+
+```text
+models/
+├── yolov12n-face.pt      # ✅ Included weight (Nano)
+├── yolov12s-face.pt      # ✅ Included weight (Small)
+├── yolov12m-face.pt      # 📥 Download needed (Medium)
+├── yolov12l-face.pt      # 📥 Download needed (Large)
+├── MODELS.md             # This file
+└── training/             # 🧠 Training Source & Evaluation
+    ├── train_yolov12-face_widerface.ipynb  # Jupyter Notebook for reproducing the training
+    └── benchmarks/                    # 📊 Evaluation metrics and plots
+        ├── combined_results.png       # Combined training loss/mAP charts
+        ├── combined_F1_curves.png     # Combined F1-score comparison grids
+        ├── combined_confusion...      # Combined Confusion Matrices (2x2 grid)
+        ├── nano/                      # Artifacts for Nano variant
+        │   ├── args.yaml              # Hyperparameters configuration
+        │   ├── results.csv            # Epoch-by-epoch training metrics
+        │   ├── results.png            # YOLO default training overview
+        │   ├── confusion_matrix.png   
+        │   ├── confusion_matrix_normalized.png
+        │   ├── BoxF1_curve.png        # F1-Confidence curve
+        │   ├── BoxP_curve.png         # Precision curve
+        │   ├── BoxR_curve.png         # Recall curve
+        │   └── BoxPR_curve.png        # Precision-Recall curve
+        ├── small/                     # Artifacts for Small variant
+        │   └── [Same structure as nano]
+        ├── medium/                    # Artifacts for Medium variant
+        │   └── [Same structure as nano]
+        └── large/                     # Artifacts for Large variant
+            └── [Same structure as nano]
+```
+
+## 🏋️ Training & Reproducibility
+
+The `training/` directory ensures full transparency of this project:
+
+1. **Notebook:** `train_yolov12-face_widerface.ipynb` contains the exact code used to train these models on the WIDER FACE dataset. *(Note: The raw WIDER FACE images are not included due to size and licensing limits. Please download them from the official source if you wish to retrain)*.
+
+2. **Hyperparameters (`args.yaml`):** Each model's folder inside `benchmarks/` contains the exact configuration used during training.
+
+3. **Metrics & Visuals:** The `benchmarks/` folder includes comprehensive curves (F1, PR) and normalized confusion matrices to validate the model's robustness and background suppression capabilities.
+   
+---
+
 ## ⬇️ Download Instructions
 
 The models are sourced from the [YapaLab/yolo-face](https://github.com/YapaLab/yolo-face) repository (Release 1.0.0).
@@ -53,19 +100,19 @@ Click the links below to download the files and place them into the models/ dire
 | Medium | ~40 MB | [yolo12m-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12m-face.pt) |
 | Large | ~53 MB | [yolo12l-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt) |
 
-## 📂 Model File Organization
+### Option 3: Train from Scratch (Reproducibility)
+If you prefer to train the models yourself to generate the `.pt` files, you can use the provided Jupyter Notebook and configuration files.
 
-After downloading, your `models/` folder should look like:
-```
-models/
-├── yolov12n-face.pt      # ✅ Already included (6 MB)
-├── yolov12s-face.pt      # ✅ Already included (18 MB)
-├── yolov12m-face.pt      # 📥 Download needed (40 MB)
-├── yolov12l-face.pt      # 📥 Download needed (52 MB)
-└── MODELS.md             # This file
-```
+**⚠️ Note:** A CUDA-enabled GPU is highly recommended for this process.
 
-## How to Use
+**Steps:**
+1. **Prepare the Dataset:** Download the WIDER FACE dataset (via Kaggle or the official site) and extract it into a `datasets/WIDER_FACE/` directory at the root of your project.
+2. **Open the Notebook:** Navigate to the `models/training/` directory and launch `train_yolov12-face_widerface.ipynb`.
+3. **Configure Hyperparameters:** You can reference the exact training configurations used for each model by checking the `args.yaml` files located inside the `models/training/benchmarks/<model_size>/` directories.
+4. **Run Training:** Execute the cells in the notebook. 
+5. **Move the Weights:** Once the training finishes, Ultralytics YOLO will save the best weights at `runs/detect/train/weights/best.pt`. Rename this file (e.g., to `yolov12m-face.pt`) and move it directly into the `models/` folder.
+
+## 🚀 How to Use in the Web App
 
 Once all models are downloaded, you can select them from the web interface:
 
@@ -90,7 +137,7 @@ Once all models are downloaded, you can select them from the web interface:
 
 ### Model Not Found Error
 ```
-FileNotFoundError: Model not found: models/yolov8m_200e.pt
+FileNotFoundError: Model not found: models/yolov12m-face.pt
 ```
 **Solution:** Download the model using one of the methods above
 
@@ -120,6 +167,3 @@ FileNotFoundError: Model not found: models/yolov8m_200e.pt
 ---
 
 **Note:** The medium and large models in this project are from the YOLOv8-Face repository, which are specifically optimized for face detection. For generic object detection models, refer to the official Ultralytics documentation.
-
-
-
