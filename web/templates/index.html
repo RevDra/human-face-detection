@@ -36,7 +36,6 @@
         .file-size { color: #558b2f; font-size: 0.9em; }
         .file-preview { max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 10px; cursor: pointer; }
         
-        /* [SỬA LẠI] CSS Webcam để không bị viền đen */
         .video-container { 
             position: relative; 
             width: 100%; 
@@ -44,14 +43,14 @@
             border-radius: 8px; 
             overflow: hidden; 
             margin-bottom: 20px; 
-            min-height: 360px; /* Dùng min-height thay vì aspect-ratio */
+            min-height: 360px;
             display: flex; 
             align-items: center; 
             justify-content: center;
         }
         #webcamVideo, #webcamResult {
             width: 100%;
-            height: auto;    /* Tự động theo tỷ lệ ảnh gốc */
+            height: auto;
             display: block;  
             object-fit: fill; 
         }
@@ -245,7 +244,7 @@
                         </div>
                     </div>
                     <button id="toggleFacesBtn" class="btn-toggle-details" onclick="toggleFacesList()" style="display: none;">
-                        👁️ Xem chi tiết danh sách
+                        👁️ Detail List
                     </button>
                     <div class="faces-list" id="facesList" style="display: none;"></div>
                     <button class="download-link" id="downloadImageBtn" onclick="downloadImage()" style="display: block; margin-top: 15px; width: 100%; padding: 10px;">
@@ -254,16 +253,16 @@
                 </div>
 
                 <div id="ratingSection" class="rating-box">
-                    <h5>Kết quả này thế nào?</h5>
+                    <h5>How was your experience?</h5>
                     <div class="stars">
-                        <input type="radio" name="rating" id="s5" value="5"><label for="s5" title="Tuyệt vời">★</label>
-                        <input type="radio" name="rating" id="s4" value="4"><label for="s4" title="Tốt">★</label>
-                        <input type="radio" name="rating" id="s3" value="3"><label for="s3" title="Trung bình">★</label>
-                        <input type="radio" name="rating" id="s2" value="2"><label for="s2" title="Kém">★</label>
-                        <input type="radio" name="rating" id="s1" value="1"><label for="s1" title="Rất tệ">★</label>
+                        <input type="radio" name="rating" id="s5" value="5"><label for="s5" title="Excellent">★</label>
+                        <input type="radio" name="rating" id="s4" value="4"><label for="s4" title="Good">★</label>
+                        <input type="radio" name="rating" id="s3" value="3"><label for="s3" title="Not bad">★</label>
+                        <input type="radio" name="rating" id="s2" value="2"><label for="s2" title="Bad">★</label>
+                        <input type="radio" name="rating" id="s1" value="1"><label for="s1" title="Awful">★</label>
                     </div>
-                    <textarea id="fbComment" rows="3" placeholder="Góp ý thêm cho mình nhé (Không bắt buộc)..."></textarea>
-                    <button onclick="sendFeedback()" class="btn-submit">Gửi Đánh Giá</button>
+                    <textarea id="fbComment" rows="3" placeholder="Please provide more (non-compulsory)..."></textarea>
+                    <button onclick="sendFeedback()" class="btn-submit">Send feedback</button>
                 </div>
             </div>
         </div>
@@ -326,16 +325,16 @@
                     <a id="downloadLink" class="download-link" target="_blank">⬇️ Download Output Video</a>
                         
                     <div id="videoRatingSection" class="rating-box">
-                        <h5>Kết quả này thế nào?</h5>
+                        <h5>How is the result?</h5>
                         <div class="stars">
-                            <input type="radio" name="videoRating" id="v5" value="5"><label for="v5" title="Tuyệt vời">★</label>
-                            <input type="radio" name="videoRating" id="v4" value="4"><label for="v4" title="Tốt">★</label>
-                            <input type="radio" name="videoRating" id="v3" value="3"><label for="v3" title="Trung bình">★</label>
-                            <input type="radio" name="videoRating" id="v2" value="2"><label for="v2" title="Kém">★</label>
-                            <input type="radio" name="videoRating" id="v1" value="1"><label for="v1" title="Rất tệ">★</label>
+                            <input type="radio" name="videoRating" id="v5" value="5"><label for="v5" title="Great">★</label>
+                            <input type="radio" name="videoRating" id="v4" value="4"><label for="v4" title="Well">★</label>
+                            <input type="radio" name="videoRating" id="v3" value="3"><label for="v3" title="OK">★</label>
+                            <input type="radio" name="videoRating" id="v2" value="2"><label for="v2" title="Bad">★</label>
+                            <input type="radio" name="videoRating" id="v1" value="1"><label for="v1" title="Terrible">★</label>
                         </div>
-                        <textarea id="videoFbComment" rows="3" placeholder="Góp ý thêm cho mình nhé (Không bắt buộc)..."></textarea>
-                        <button onclick="sendVideoFeedback()" class="btn-submit">Gửi Đánh Giá</button>
+                        <textarea id="videoFbComment" rows="3" placeholder="Tell us more (non-compulsory)..."></textarea>
+                        <button onclick="sendVideoFeedback()" class="btn-submit">Send feedback</button>
                     </div>                    
                 </div>
             </div>
@@ -446,6 +445,7 @@
                     <p><strong>GET</strong> /api/models - List available models</p>
                     <p><strong>GET</strong> /api/health - Health check</p>
                     <p><strong>POST</strong> /api/feedback - Submit feedback</p>
+                    <p><strong>GET</strong> /api/download/&lt;filename&gt; - Download processed files</p>
                 </div>
             </div>
         </div>
@@ -482,29 +482,28 @@
         let isProcessing = false; // Prevent overlapping requests
         let lastFilename = "";
         let lastModel = "";
-        // LOAD MODELS KHI TRANG WEB VỪA MỞ
+        // LOAD MODELS 
         document.addEventListener('DOMContentLoaded', loadModels);
         async function loadModels() {
             try {
                 const response = await fetch('/api/models');
                 const models = await response.json();
                 
-                // Các thẻ select cần điền
+                // Selector
                 const selectors = ['imageModel', 'videoModel', 'webcamModel'];
                 
                 selectors.forEach(id => {
                     const select = document.getElementById(id);
                     if (!select) return;
                     
-                    select.innerHTML = ''; // Xóa chữ "Loading..."
+                    select.innerHTML = '';
                     
-                    // Duyệt qua danh sách trả về từ server
                     for (const [key, info] of Object.entries(models)) {
                         const option = document.createElement('option');
-                        option.value = info.name; // Tên file .pt
-                        option.text = info.label || `${key.toUpperCase()} - ${info.description}`; // Tên hiển thị
+                        option.value = info.name; // file .pt
+                        option.text = info.label || `${key.toUpperCase()} - ${info.description}`;
                         
-                        // Logic chọn mặc định thông minh
+                        // Default logic
                         if (id === 'imageModel' && key === 'large') option.selected = true;
                         if (id === 'videoModel' && key === 'small') option.selected = true;
                         if (id === 'webcamModel' && key === 'nano') option.selected = true;
@@ -514,7 +513,7 @@
                 });
             } catch (e) {
                 console.error("Failed to load models:", e);
-                // Fallback nếu API lỗi: điền thủ công để không bị trắng trang
+                // Fallback if errors in API
                 ['imageModel', 'videoModel', 'webcamModel'].forEach(id => {
                     const select = document.getElementById(id);
                     select.innerHTML = '<option value="yolov12n-face.pt">YOLOv12 Nano (Fallback)</option>';
@@ -794,12 +793,12 @@
                         const toggleBtn = document.getElementById('toggleFacesBtn');
                         const listDiv = document.getElementById('facesList');
                         listDiv.style.display = 'none'; 
-                        toggleBtn.style.display = 'block'; // Hiện nút lên
+                        toggleBtn.style.display = 'block';
                         toggleBtn.innerHTML = `👁️ Xem chi tiết (${data.detections.count} khuôn mặt)`;
                     } else {
                         facesList.innerHTML = '<p style="color: #999;">No faces detected</p>';
-                        facesList.style.display = 'block'; // Nếu không có mặt nào thì hiện text thông báo luôn
-                        document.getElementById('toggleFacesBtn').style.display = 'none'; // Ẩn nút đi
+                        facesList.style.display = 'block'; // No face then noti
+                        document.getElementById('toggleFacesBtn').style.display = 'none'; // Hide button
                     }
                     
                     document.getElementById('imageResult').style.display = 'block';
@@ -937,7 +936,7 @@
             const videoRatingSection = document.getElementById('videoRatingSection');
             if (videoRatingSection) videoRatingSection.style.display = 'none';
         }
-        // --- CÁC HÀM XỬ LÝ RATING ---
+        // ---  RATING ---
         function resetRatingForm() {
             document.getElementById("ratingSection").style.display = "block";
             document.getElementById("fbComment").value = "";
