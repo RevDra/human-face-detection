@@ -37,7 +37,7 @@ class YOLOv12FaceDetector:
         except Exception as e:
             raise Exception(f"Failed to load model: {e}")
 
-    def detect_faces(self, image, conf_threshold=0.5):
+    def detect_faces(self, image, conf_threshold=0.32):
         """Standard detection"""
         detections = []
         try:
@@ -63,7 +63,7 @@ class YOLOv12FaceDetector:
             print(f"Detection error: {e}")
         return detections
 
-    def detect_faces_optimized(self, image, conf_threshold=0.5, max_width=640):
+    def detect_faces_optimized(self, image, conf_threshold=0.32, max_width=640):
         """Optimized detection with resize"""
         detections = []
         try:
@@ -139,7 +139,7 @@ class YOLOv12FaceDetector:
 
 # --- GUI Class (Webcam) ---
 class WebcamFaceDetectionGUI:
-    def __init__(self, model_path, conf_threshold=0.5, skip_frames=2, inference_width=640):
+    def __init__(self, model_path, conf_threshold=0.32, skip_frames=2, inference_width=640):
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.skip_frames = skip_frames
@@ -279,7 +279,7 @@ class WebcamFaceDetectionGUI:
 
 # --- Helper Functions ---
 def webcam_detection_with_display(
-    model_path, conf_threshold=0.5, skip_frames=2, inference_width=640
+    model_path, conf_threshold=0.32, skip_frames=2, inference_width=640
 ):
     gui = WebcamFaceDetectionGUI(model_path, conf_threshold, skip_frames, inference_width)
     gui.run()
