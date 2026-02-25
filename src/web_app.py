@@ -166,10 +166,10 @@ def detect_image():
         is_webcam = "webcam" in file.filename.lower()
         if is_webcam:
             # Use optimized detection for speed
-            detections = detector.detect_faces_optimized(image, conf_threshold=0.35, max_width=480)
+            detections = detector.detect_faces_optimized(image, conf_threshold=0.32, max_width=480)
         else:
             # Use standard detection for uploaded files
-            detections = detector.detect_faces(image, conf_threshold=0.35)
+            detections = detector.detect_faces(image, conf_threshold=0.32)
 
         # Draw detections
         result_image = detector.draw_faces(image, detections, show_confidence=True)
@@ -239,7 +239,7 @@ def detect_video():
             video_path=str(input_path),
             model_path=str(MODELS_DIR / model),
             output_path=str(output_path),
-            conf_threshold=0.35,
+            conf_threshold=0.32,
         )
 
         # Return file info
@@ -276,7 +276,6 @@ def download_file(filename):
 @app.route("/api/models", methods=["GET"])
 def get_models():
     """Get ALL available models for dropdown selection"""
-    # Cập nhật danh sách đầy đủ 4 models
     models = {
         "nano": {
             "name": "yolov12n-face.pt",
@@ -304,14 +303,12 @@ def get_models():
         },
     }
 
-    # Chỉ trả về những model thực sự tồn tại trong thư mục
     available = {}
     for key, info in models.items():
         model_path = MODELS_DIR / info["name"]
         if model_path.exists():
             available[key] = info
 
-    # Sắp xếp theo thứ tự kích thước để hiển thị đẹp hơn
     order = ["nano", "small", "medium", "large"]
     sorted_available = {k: available[k] for k in order if k in available}
 
