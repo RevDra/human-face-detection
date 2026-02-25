@@ -12,49 +12,62 @@
 </div>
 <br>
 
-A professional, real-time face detection system built with YOLOv12 and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy and speed.
+A professional, real-time face detection system built with YOLOv12 and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy and speed. 
+
 View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 
 ## ✨ Features
 
-### 📷 Image Detection
-- Upload and detect faces in images (JPG, PNG, GIF)
-- Attention-based detection for small/occluded faces
-- Real-time detection with confidence scores
-- Download annotated result images
-- Display face statistics (count, position, size)
-
-### 🎬 Video Detection
-- Process video files (MP4, AVI, MOV, MKV)
-- Annotate each frame with bounding boxes
-- Download processed video
+### 📷 Image & Video Detection
+- Upload and detect faces in images (JPG, PNG) and videos (MP4, AVI, MOV).
+- Attention-based detection for small, distant, or occluded faces.
+- Interactive bounding boxes with cropped face previews.
+- Download annotated results and face statistics.
 
 ### 📹 Live Webcam
-- Real-time detection from your webcam
-- Side-by-side video feed and detection results
-- Live statistics (FPS, face count, duration)
-- Start/stop controls
+- Real-time detection directly from your browser.
+- Side-by-side video feed and detection results.
+- Live statistics (FPS, face count, duration).
+
+### 📊 Feedback & Analytics
+- Built-in MySQL database integration (via Aiven) to collect user ratings and feedback securely.
+- Ready for admin dashboard visualization.
 
 ### 🤖 Model Selection
-- **YOLOv12 Nano** (yolov12n-face.pt) - Super Fast, best for CPU/Webcam
-- **YOLOv12 Small** (yolov12s-face.pt) - Balanced speed & accuracy
-- **YOLOv12 Medium** (yolov12m-face.pt) - High precision
-- **YOLOv12 Large** (yolov12l-face.pt) - State-of-the-art accuracy
+- **YOLOv12 Nano** (yolov12n-face.pt) - Super Fast, best for CPU/Webcam.
+- **YOLOv12 Small** (yolov12s-face.pt) - Balanced speed & accuracy.
+- **YOLOv12 Medium** (yolov12m-face.pt) - High precision (The "Sweet Spot").
+- **YOLOv12 Large** (yolov12l-face.pt) - State-of-the-art accuracy for high-res images.
+
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.10+
-- Required packages (see below)
+- Git
 
 ### Installation
 
-1. **Install dependencies:**
+1. **Clone the repository:**
+```bash
+git clone [https://github.com/RevDra/human-face-detection.git](https://github.com/RevDra/human-face-detection.git)
+cd human-face-detection
+```
+
+2. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Run the web server:**
+3. **Environment Setup (Required):**
+Copy the template environment file and add your secure credentials.
+```bash
+cp .env.example .env
+```
+*Open `.env` in a text editor and update the `DB_URL` with your MySQL connection string.*
+
+4. **Run the web server:**
 #### Linux/Mac
 ```bash
 ./config/deploy.sh start
@@ -65,8 +78,7 @@ pip install -r requirements.txt
 config\deploy.bat start
 ```
 
-3. **Open in browser**
-https://localhost:7860
+5. **Open in browser:** Navigate to `https://localhost:7860`
 
 ## 📁 Project Structure
 
@@ -96,7 +108,8 @@ Human_face_detection/
 ├── models/                             # YOLOv12 Models
 │   ├── yolov12n-face.pt                # Nano model (Fastest)
 │   ├── yolov12s-face.pt                # Small model (Balanced)
-│   └── MODELS.md                       # Download instructions for Med/Large models
+│   ├── MODELS.md                       # Download instructions for Med/Large models
+│   └── training/                       # Source code & benchmarks (Loss, PR curves, etc.)
 │
 ├── src/                                # Source Code
 │   ├── web_app.py                      # Flask web server
@@ -116,11 +129,12 @@ Human_face_detection/
 ├── LICENSE                             # AGPL v3 License
 ├── README.md                           # Main documentation
 ├── SECURITY.md                         # Security policy
+├── .env.example                        # Template for environment variables (DB credentials)
 └── requirements.txt                    # Python dependencies
 ```
 
 ## 🐳 Docker Support (Recommended)
-You can run the application instantly without installing Python or dependencies manually.
+You can run the application instantly without needing to install Python or manually install dependencies.
 
 **Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop) installed.
 
@@ -151,6 +165,7 @@ docker run -p 7860:7860 -v $(pwd)/data:/app/data yolov12-face-detection
 | POST | `/api/detect-image` | Detect faces in uploaded image |
 | POST | `/api/detect-video` | Detect faces in uploaded video |
 | GET | `/api/models` | List available models |
+| POST | `/api/feedback` | Submit user rating and comments to database |
 | GET | `/api/health` | Health check |
 | GET | `/api/download/<filename>` | Download processed files |
 
@@ -180,7 +195,7 @@ print(f"Detected {result['detections']['count']} faces")
 ## 📊 Detection Details
 
 ### Confidence Threshold
-Default: 0.35 (35%)
+Default: 0.32 (32%)
 - Higher threshold = fewer false positives but may miss faces
 - Lower threshold = more detections but more false positives
 

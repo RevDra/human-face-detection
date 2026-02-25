@@ -6,22 +6,35 @@ Supports image upload, video upload, and live webcam streaming
 import base64
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 
 import cv2
 import numpy as np
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, send_file
 from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
+from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy.model import Model
+from sqlalchemy.exc import OperationalError
 from werkzeug.utils import secure_filename
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
 # Initialize Flask app
+load_dotenv()
+
 app = Flask(__name__, template_folder="../web/templates")
 
 # Configuration
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DB_URL")
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback_secret_key_neu_khong_co")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280}  # Giữ kết nối MySQL ổn định
+
+db = SQLAlchemy(app)
 PROJECT_ROOT = Path(__file__).parent.parent
 UPLOAD_FOLDER = PROJECT_ROOT / "data" / "uploads"
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -41,12 +54,30 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
-    default_limits=["1000 per day", "100 per hour"],
+    default_limits=["10000 per day", "1000 per hour"],
     storage_uri="memory://",
 )
 
 # Model cache
 detector_cache = {}
+
+
+class Feedback(db.Model):  # type: ignore
+    __tablename__ = "feedbacks"
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255))
+    model_name = db.Column(db.String(50))
+    rating = db.Column(db.Integer)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+with app.app_context():
+    try:
+        db.create_all()
+        print("Connect to MySQL successfully!")
+    except Exception as e:
+        print(f"Connection error: {e}")
 
 
 def get_detector(model_name):
@@ -104,7 +135,6 @@ def index():
 
 
 @app.route("/api/detect-image", methods=["POST"])
-@limiter.limit("15 per minute")
 def detect_image():
     """Detect faces in uploaded image"""
     try:
@@ -172,7 +202,7 @@ def detect_image():
 
         return jsonify(response)
 
-    except Exception as e:
+    except Exception:
         logging.exception("Error during image detection")
         return jsonify({"error": "Internal server error during image detection"}), 500
 
@@ -222,7 +252,7 @@ def detect_video():
 
         return jsonify(response)
 
-    except Exception as e:
+    except Exception:
         # Log the full exception server-side without exposing details to the client
         app.logger.exception("Error while processing video detection request")
         return jsonify({"error": "Internal server error"}), 500
@@ -286,6 +316,26 @@ def get_models():
     sorted_available = {k: available[k] for k in order if k in available}
 
     return jsonify(sorted_available)
+
+
+@app.route("/api/feedback", methods=["POST"])
+@limiter.limit("5 per minute")
+def submit_feedback():
+    try:
+        data = request.json
+
+        new_fb = Feedback(
+            filename=data.get("filename"),
+            model_name=data.get("model"),
+            rating=data.get("rating"),
+            comment=data.get("comment", ""),
+        )
+        db.session.add(new_fb)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Rating saved!"})
+    except Exception as e:
+        app.logger.error(f"DB Error: {e}")
+        return jsonify({"error": "Database error"}), 500
 
 
 @app.route("/api/health", methods=["GET"])

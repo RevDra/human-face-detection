@@ -9,3 +9,7 @@ torch>=2.0.0
 torchvision>=0.15.0
 Flask>=2.3.0
 Werkzeug>=2.3.0
+Flask-Limiter>=3.0.0
+Flask-SQLAlchemy>=3.0.0
+pymysql>=1.0.0
+cryptography>=45.0.0

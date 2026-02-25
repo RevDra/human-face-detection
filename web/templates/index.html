@@ -35,7 +35,25 @@
         .file-name { color: #2e7d32; font-weight: 600; word-break: break-all; }
         .file-size { color: #558b2f; font-size: 0.9em; }
         .file-preview { max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 10px; cursor: pointer; }
-        .video-container { position: relative; width: 100%; max-width: 100%; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+        
+        .video-container { 
+            position: relative; 
+            width: 100%; 
+            background: #000; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            margin-bottom: 20px; 
+            min-height: 360px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+        #webcamVideo, #webcamResult {
+            width: 100%;
+            height: auto;
+            display: block;  
+            object-fit: fill; 
+        }
         #webcam { width: 100%; height: auto; display: block; }
         .webcam-controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
         .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; animation: blink 1s infinite; }
@@ -75,6 +93,87 @@
         .download-link:hover { background: #764ba2; transform: translateY(-2px); }
         .footer { text-align: center; color: rgba(255,255,255,0.8); margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2); }
         @media (max-width: 768px) { .header h1 { font-size: 1.8em; } .card { padding: 20px; } .tabs { flex-direction: column; } .tab-button { width: 100%; } }
+        
+        .rating-box { 
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            max-width: 450px;
+            margin: 30px auto; 
+            text-align: center;
+            border: 1px solid #eef0f5;
+            display: none; 
+        }
+        .rating-box h5 {
+            color: #333;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        .stars {
+            display: flex !important; 
+            flex-direction: row-reverse;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        } 
+        .stars input { display: none; }
+        .stars label {
+            display: inline-block !important; 
+            width: auto !important; 
+            margin: 0 !important; 
+            font-size: 45px; /* Size to hơn */
+            color: #e0e0e0; 
+            cursor: pointer; 
+            transition: 0.2s;
+            line-height: 1;
+        }
+        .stars input:checked ~ label, .stars label:hover, .stars label:hover ~ label {
+            color: #ffc107;
+            transform: scale(1.2); 
+        }
+        #fbComment, #videoFbComment {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: inherit;
+            resize: none;
+            transition: border-color 0.3s;
+        }
+        #fbComment:focus, #videoFbComment:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        .btn-submit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+            margin-top: 15px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s;
+            width: 100%;
+        }
+        .btn-submit:hover {transform: translateY(-2px);}
+        
+        .btn-toggle-details {
+            background: transparent;
+            border: 2px dashed #667eea;
+            color: #667eea;
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-toggle-details:hover {background: #f0f2ff;border-style: solid;}
     </style>
 </head>
 <body>
@@ -144,10 +243,26 @@
                             <span class="stat-value" id="faceCount">0</span>
                         </div>
                     </div>
-                    <div class="faces-list" id="facesList"></div>
+                    <button id="toggleFacesBtn" class="btn-toggle-details" onclick="toggleFacesList()" style="display: none;">
+                        👁️ Detail List
+                    </button>
+                    <div class="faces-list" id="facesList" style="display: none;"></div>
                     <button class="download-link" id="downloadImageBtn" onclick="downloadImage()" style="display: block; margin-top: 15px; width: 100%; padding: 10px;">
                         ⬇️ Download Result Image
                     </button>
+                </div>
+
+                <div id="ratingSection" class="rating-box">
+                    <h5>How was your experience?</h5>
+                    <div class="stars">
+                        <input type="radio" name="rating" id="s5" value="5"><label for="s5" title="Excellent">★</label>
+                        <input type="radio" name="rating" id="s4" value="4"><label for="s4" title="Good">★</label>
+                        <input type="radio" name="rating" id="s3" value="3"><label for="s3" title="Not bad">★</label>
+                        <input type="radio" name="rating" id="s2" value="2"><label for="s2" title="Bad">★</label>
+                        <input type="radio" name="rating" id="s1" value="1"><label for="s1" title="Awful">★</label>
+                    </div>
+                    <textarea id="fbComment" rows="3" placeholder="Please provide more (non-compulsory)..."></textarea>
+                    <button onclick="sendFeedback()" class="btn-submit">Send feedback</button>
                 </div>
             </div>
         </div>
@@ -208,6 +323,19 @@
                         Your browser does not support the video tag.
                     </video>
                     <a id="downloadLink" class="download-link" target="_blank">⬇️ Download Output Video</a>
+                        
+                    <div id="videoRatingSection" class="rating-box">
+                        <h5>How is the result?</h5>
+                        <div class="stars">
+                            <input type="radio" name="videoRating" id="v5" value="5"><label for="v5" title="Great">★</label>
+                            <input type="radio" name="videoRating" id="v4" value="4"><label for="v4" title="Well">★</label>
+                            <input type="radio" name="videoRating" id="v3" value="3"><label for="v3" title="OK">★</label>
+                            <input type="radio" name="videoRating" id="v2" value="2"><label for="v2" title="Bad">★</label>
+                            <input type="radio" name="videoRating" id="v1" value="1"><label for="v1" title="Terrible">★</label>
+                        </div>
+                        <textarea id="videoFbComment" rows="3" placeholder="Tell us more (non-compulsory)..."></textarea>
+                        <button onclick="sendVideoFeedback()" class="btn-submit">Send feedback</button>
+                    </div>                    
                 </div>
             </div>
         </div>
@@ -235,18 +363,21 @@
                 </div>
 
                 <div style="display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                    
                     <div style="flex: 1; min-width: 320px;">
                         <h3 style="color: #667eea; margin-bottom: 10px;">📹 Webcam Feed</h3>
                         <div class="video-container">
-                            <video id="webcamVideo" width="100%" height="auto" playsinline autoplay style="border-radius: 8px;"></video>
+                            <video id="webcamVideo" playsinline autoplay muted></video>
                         </div>
                     </div>
 
                     <div style="flex: 1; min-width: 320px;">
                         <h3 style="color: #667eea; margin-bottom: 10px;">🎯 Detection Results</h3>
                         <div class="video-container">
-                            <img id="webcamResult" style="width: 100%; border-radius: 8px; background: #222; display: none;">
-                            <p id="webcamPlaceholder" style="text-align: center; color: #999; padding: 40px; background: #222; border-radius: 8px; display: block;">Click Start Detection</p>
+                            <img id="webcamResult" style="display: none;">
+                            <p id="webcamPlaceholder" style="color: #666; font-size: 1.1em;">
+                                Click ▶️ <strong>Start Detection</strong>
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -313,6 +444,8 @@
                     <p><strong>POST</strong> /api/detect-video - Detect faces in video</p>
                     <p><strong>GET</strong> /api/models - List available models</p>
                     <p><strong>GET</strong> /api/health - Health check</p>
+                    <p><strong>POST</strong> /api/feedback - Submit feedback</p>
+                    <p><strong>GET</strong> /api/download/&lt;filename&gt; - Download processed files</p>
                 </div>
             </div>
         </div>
@@ -339,7 +472,7 @@
         </div>
     </div>
 
-    <script>
+<script>
         // Global variables for webcam
         let webcamStream = null;
         let webcamRunning = false;
@@ -347,31 +480,30 @@
         let frameCount = 0;
         let startTime = null;
         let isProcessing = false; // Prevent overlapping requests
-
-        // LOAD MODELS KHI TRANG WEB VỪA MỞ
+        let lastFilename = "";
+        let lastModel = "";
+        // LOAD MODELS 
         document.addEventListener('DOMContentLoaded', loadModels);
-
         async function loadModels() {
             try {
                 const response = await fetch('/api/models');
                 const models = await response.json();
                 
-                // Các thẻ select cần điền
+                // Selector
                 const selectors = ['imageModel', 'videoModel', 'webcamModel'];
                 
                 selectors.forEach(id => {
                     const select = document.getElementById(id);
                     if (!select) return;
                     
-                    select.innerHTML = ''; // Xóa chữ "Loading..."
+                    select.innerHTML = '';
                     
-                    // Duyệt qua danh sách trả về từ server
                     for (const [key, info] of Object.entries(models)) {
                         const option = document.createElement('option');
-                        option.value = info.name; // Tên file .pt
-                        option.text = info.label || `${key.toUpperCase()} - ${info.description}`; // Tên hiển thị
+                        option.value = info.name; // file .pt
+                        option.text = info.label || `${key.toUpperCase()} - ${info.description}`;
                         
-                        // Logic chọn mặc định thông minh
+                        // Default logic
                         if (id === 'imageModel' && key === 'large') option.selected = true;
                         if (id === 'videoModel' && key === 'small') option.selected = true;
                         if (id === 'webcamModel' && key === 'nano') option.selected = true;
@@ -381,14 +513,13 @@
                 });
             } catch (e) {
                 console.error("Failed to load models:", e);
-                // Fallback nếu API lỗi: điền thủ công để không bị trắng trang
+                // Fallback if errors in API
                 ['imageModel', 'videoModel', 'webcamModel'].forEach(id => {
                     const select = document.getElementById(id);
                     select.innerHTML = '<option value="yolov12n-face.pt">YOLOv12 Nano (Fallback)</option>';
                 });
             }
         }
-
         // Tab switching
         function switchTab(tabName) {
             // Hide all tabs
@@ -402,7 +533,6 @@
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
         }
-
         // Update file info display
         function updateFileInfo(type, file) {
             if (!file) return;
@@ -435,7 +565,6 @@
                 fileInfoDiv.style.display = 'block';
             }
         }
-
         // Upload area drag & drop
         function setupUploadArea(areaId, inputId) {
             const area = document.getElementById(areaId);
@@ -467,10 +596,8 @@
                 updateFileInfo(type, e.target.files[0]);
             });
         }
-
         setupUploadArea('imageUploadArea', 'imageFile');
         setupUploadArea('videoUploadArea', 'videoFile');
-
         // Webcam functions
         async function startWebcam() {
             try {
@@ -501,7 +628,6 @@
                 console.error('Camera error:', error);
             }
         }
-
         function stopWebcam() {
             if (webcamStream) {
                 webcamStream.getTracks().forEach(track => track.stop());
@@ -528,7 +654,6 @@
             startTime = null;
             isProcessing = false;
         }
-
         async function startDetectionLoop() {
             const model = document.getElementById('webcamModel').value;
             const webcamElement = document.getElementById('webcamVideo');
@@ -599,7 +724,6 @@
                 }
             }, 150); // Process every 150ms (~6-7 FPS)
         }
-
         // Detect image
         async function detectImage() {
             const file = document.getElementById('imageFile').files[0];
@@ -640,6 +764,10 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    //Rating box display
+                    lastFilename = file.name;
+                    lastModel = model;
+                    resetRatingForm();
                     // Display image
                     document.getElementById('resultImage').src = data.image;
                     
@@ -662,8 +790,15 @@
                             `;
                             facesList.appendChild(item);
                         });
+                        const toggleBtn = document.getElementById('toggleFacesBtn');
+                        const listDiv = document.getElementById('facesList');
+                        listDiv.style.display = 'none'; 
+                        toggleBtn.style.display = 'block';
+                        toggleBtn.innerHTML = `👁️ Xem chi tiết (${data.detections.count} khuôn mặt)`;
                     } else {
                         facesList.innerHTML = '<p style="color: #999;">No faces detected</p>';
+                        facesList.style.display = 'block'; // No face then noti
+                        document.getElementById('toggleFacesBtn').style.display = 'none'; // Hide button
                     }
                     
                     document.getElementById('imageResult').style.display = 'block';
@@ -680,7 +815,6 @@
                 document.getElementById('detectImageBtn').disabled = false;
             }
         }
-
         // Detect video
         async function detectVideo() {
             const file = document.getElementById('videoFile').files[0];
@@ -721,6 +855,9 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    lastFilename = file.name;
+                    lastModel = model;
+                    resetVideoRatingForm();
                     document.getElementById('videoResultText').innerHTML = `
                         ✅ Video processing complete!<br>
                         <small>Output file: ${data.output_file}</small>
@@ -746,7 +883,6 @@
                 document.getElementById('detectVideoBtn').disabled = false;
             }
         }
-
         // Show message
         function showMessage(elementId, text, type) {
             const element = document.getElementById(elementId);
@@ -757,7 +893,6 @@
                 element.className = 'message';
             }
         }
-
         // Download result image
         function downloadImage() {
             const resultImage = document.getElementById('resultImage');
@@ -782,7 +917,6 @@
             link.click();
             document.body.removeChild(link);
         }
-
         // Clear forms
         function clearImageForm() {
             document.getElementById('imageFile').value = '';
@@ -790,14 +924,124 @@
             document.getElementById('imagePreview').style.display = 'none';
             document.getElementById('imageResult').style.display = 'none';
             showMessage('imageMessage', '', '');
+            const ratingSection = document.getElementById('ratingSection');
+            if (ratingSection) ratingSection.style.display = 'none';
         }
-
         function clearVideoForm() {
             document.getElementById('videoFile').value = '';
             document.getElementById('videoFileInfo').style.display = 'none';
             document.getElementById('outputVideo').style.display = 'none';
             document.getElementById('videoResult').style.display = 'none';
             showMessage('videoMessage', '', '');
+            const videoRatingSection = document.getElementById('videoRatingSection');
+            if (videoRatingSection) videoRatingSection.style.display = 'none';
+        }
+        // ---  RATING ---
+        function resetRatingForm() {
+            document.getElementById("ratingSection").style.display = "block";
+            document.getElementById("fbComment").value = "";
+            const stars = document.querySelectorAll('input[name="rating"]');
+            stars.forEach(star => star.checked = false);
+            document.getElementById("ratingSection").scrollIntoView({ behavior: 'smooth' });
+        }
+        async function sendFeedback() {
+            const ratingEl = document.querySelector('input[name="rating"]:checked');
+            if (!ratingEl) {
+                alert("Please choose a number of stars! ⭐");
+                return;
+            }
+            const comment = document.getElementById("fbComment").value;
+            const rating = ratingEl.value;
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Sending...";
+            btn.disabled = true;
+            try {
+                const response = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: lastFilename,
+                        model: lastModel,
+                        rating: rating,
+                        comment: comment
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert("Thank you for your feedback! ❤️");
+                    document.getElementById("ratingSection").style.display = "none";
+                } else {
+                    alert("Error: " + (data.error || data.message || "Unidentified error"));
+                }
+            } catch (error) {
+                console.error("Error sending feedback:", error);
+                alert("Could not send feedback. Please check your Internet connection.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+        function toggleFacesList() {
+            const list = document.getElementById('facesList');
+            const btn = document.getElementById('toggleFacesBtn');
+    
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                btn.innerHTML = '⬆️ Shrink';
+                btn.style.background = '#f0f2ff';
+            } else {
+                list.style.display = 'none';
+                btn.innerHTML = '👁️ Details';
+                btn.style.background = 'transparent';
+            }
+        }
+        function resetVideoRatingForm() {
+            document.getElementById("videoRatingSection").style.display = "block";
+            document.getElementById("videoFbComment").value = "";
+            const stars = document.querySelectorAll('input[name="videoRating"]');
+            stars.forEach(star => star.checked = false);
+            document.getElementById("videoRatingSection").scrollIntoView({ behavior: 'smooth' });
+        }
+        async function sendVideoFeedback() {
+            const ratingEl = document.querySelector('input[name="videoRating"]:checked');
+            if (!ratingEl) {
+                alert("Please choose a number of stars! ⭐");
+                return;
+            }
+            // [SỬA LẠI LOGIC LẤY COMMENT]
+            const commentBox = document.getElementById("videoFbComment");
+            const comment = commentBox ? commentBox.value : "";
+            const rating = ratingEl.value;
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Đang gửi...";
+            btn.disabled = true;
+            try {
+                const response = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: lastFilename,
+                        model: lastModel,
+                        rating: rating,
+                        comment: comment + " (Video)"
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert("Thank you for your feedback! ❤️");
+                    document.getElementById("videoRatingSection").style.display = "none";
+                } else {
+                    alert("Lỗi: " + (data.error || data.message || "Unidentified error"));
+                }
+            } catch (error) {
+                console.error("Error sending feedback:", error);
+                alert("Could not send feedback. Please check your Internet connection.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
         }
     </script>
 </body>
