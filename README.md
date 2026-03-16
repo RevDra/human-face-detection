@@ -41,6 +41,89 @@ View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 
 ---
 
+## System Business Flow
+
+```mermaid
+graph TD
+    %% Define Nodes
+    User((User))
+    UI[Web UI / Frontend]
+    ModelSelection{Select YOLOv12 Model}
+    InputSelect{Select Data Source}
+    
+    %% Data Sources
+    Upload[Upload Image/Video]
+    Webcam[Live Webcam Stream]
+    
+    %% Backend & API
+    API_Detect[/API: /api/detect-image & video/]
+    FlaskBackend[Flask Backend Server]
+    YOLO_Engine[YOLOv12 Inference Engine]
+    
+    %% Results & Post-processing
+    Results[Extract Bounding Box, Confidence, Count]
+    Display[Display Results & Stats on UI]
+    
+    %% Actions & Telemetry
+    Action_Download[Download Annotated Files]
+    Action_Feedback[Submit Rating & Feedback]
+    API_Download[/API: /api/download/]
+    API_Feedback[/API: /api/feedback/]
+    DB[(Aiven MySQL Database)]
+
+    %% Edges (Flow)
+    User --> UI
+    UI --> ModelSelection
+    ModelSelection -->|Nano / Small / Medium / Large| InputSelect
+    
+    InputSelect -->|Static File| Upload
+    InputSelect -->|Real-time| Webcam
+    
+    Upload --> API_Detect
+    API_Detect --> FlaskBackend
+    FlaskBackend --> |Save temporary file to UPLOAD_FOLDER| YOLO_Engine
+    
+    Webcam --> |Send continuous frames| YOLO_Engine
+    
+    YOLO_Engine --> Results
+    Results --> Display
+    
+    Display --> Action_Download
+    Display --> Action_Feedback
+    
+    Action_Download --> API_Download
+    Action_Feedback --> API_Feedback
+    
+    API_Feedback --> |Securely store telemetry| DB
+```
+
+---
+
+### Business Logic Detailed Explanation
+
+**1. Initialization & Configuration**
+* **User Interaction:** The user accesses the Web UI (hosted locally or via Hugging Face Spaces).
+* **Model Selection:** The system prompts the user to select a YOLOv12 model variant (Nano, Small, Medium, or Large). This allows the user to balance between blazing-fast inference speeds (ideal for webcams) and maximum precision (ideal for high-resolution static images).
+
+**2. Data Input Stage**
+The system routes the user through one of two primary data pipelines:
+* **Batch Processing (Static Files):** The user uploads image (JPG, PNG) or video (MP4, AVI, MOV) files. The frontend packages the payload and sends a POST request to the respective `/api/detect-image` or `/api/detect-video` endpoints.
+* **Real-Time Stream:** The user grants browser camera permissions. The frontend captures the live video feed and continuously pushes frames to the processing engine.
+
+**3. Core AI Inference**
+* **Request Handling:** The Flask Backend receives the data. For uploads, it temporarily stores the files in the `UPLOAD_FOLDER` (validating against the `MAX_FILE_SIZE` limit).
+* **YOLOv12 Processing:** The YOLOv12 Inference Engine is triggered. Utilizing its advanced Attention Mechanisms, it scans the input to detect human faces, calculating exact bounding box coordinates and assigning a Confidence Score based on the pre-configured threshold (default: `0.32`).
+
+**4. Post-Processing & Response**
+* **Data Aggregation:** The raw model outputs are synthesized into a structured JSON response (containing face count, coordinates, and inference duration) and returned to the client.
+* **Visualization:** The Web UI dynamically renders interactive bounding boxes over the media and updates real-time statistics (such as FPS and total faces detected).
+
+**5. User Actions & Telemetry**
+* **Retrieval:** Users can interact with the `/api/download/<filename>` endpoint to securely download their processed, annotated files.
+* **Feedback Loop:** To drive future improvements, users can submit ratings and comments. The frontend calls the /api/feedback endpoint, which securely inserts the telemetry data into the Aiven MySQL Database for future analytics.
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
