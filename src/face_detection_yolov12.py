@@ -285,7 +285,7 @@ def webcam_detection_with_display(
     gui.run()
 
 
-def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0.5):
+def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0.32):
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return
@@ -316,7 +316,7 @@ def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0
     print("Video processing complete")
 
 
-def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0.5):
+def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0.32):
     image = cv2.imread(str(image_path))
     if image is None:
         return None, []
