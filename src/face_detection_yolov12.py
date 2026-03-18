@@ -351,10 +351,10 @@ def display_image_with_detections(image, title="Result"):
 def select_model_level(script_dir):
     print("\n" + "-" * 40)
     print("  SELECT MODEL SIZE (YOLOv12):")
-    print("  1. Nano   (yolov12n) - Siêu nhanh, nhẹ")
-    print("  2. Small  (yolov12s) - Cân bằng")
-    print("  3. Medium (yolov12m) - Chính xác cao")
-    print("  4. Large  (yolov12l) - Chính xác nhất (Nặng)")
+    print("  1. Nano   (yolov12n) - Super light")
+    print("  2. Small  (yolov12s) - Basic")
+    print("  3. Medium (yolov12m) - Sweet spot")
+    print("  4. Large  (yolov12l) - State of the Art")
     print("-" * 40)
 
     mapping = {
