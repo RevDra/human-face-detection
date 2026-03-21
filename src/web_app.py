@@ -148,8 +148,10 @@ def detect_image():
         if not allowed_file(file.filename) or not is_image(file.filename):
             return jsonify({"error": "Only image files allowed"}), 400
 
-        # Get model selection
+        # Get parameters
         model = request.form.get("model", "yolov12l-face.pt")
+        blur = request.form.get("blur") == "true"
+
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
             model = "yolov12l-face.pt"
@@ -171,11 +173,22 @@ def detect_image():
             # Use standard detection for uploaded files
             detections = detector.detect_faces(image, conf_threshold=0.32)
 
-        # Draw detections
-        result_image = detector.draw_faces(image, detections, show_confidence=True)
+        # Process image: Draw or Blur
+        if blur:
+            result_image = detector.blur_faces(image, detections)
+        else:
+            result_image = detector.draw_faces(image, detections, show_confidence=True)
 
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
+
+        # Extract crops for gallery
+        crops_base64 = []
+        if len(detections) > 0:
+            crops = detector.get_face_crops(image, detections)
+            for crop in crops:
+                _, buffer = cv2.imencode(".jpg", crop)
+                crops_base64.append(base64.b64encode(buffer).decode())
 
         # Convert result to base64 for display
         _, buffer = cv2.imencode(".jpg", result_image)
@@ -197,6 +210,7 @@ def detect_image():
                     }
                     for i, det in enumerate(detections)
                 ],
+                "crops": crops_base64,
             },
         }
 
