@@ -210,7 +210,7 @@ def detect_image():
                     }
                     for i, det in enumerate(detections)
                 ],
-                "crops": crops_base64
+                "crops": crops_base64,
             },
         }
 
