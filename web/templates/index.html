@@ -6,9 +6,18 @@
     <title>YOLOv12 Face Detection - Web</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; transition: background 0.3s ease; }
+        body.dark-mode { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; }
+        .card.dark-mode { background: #0f3460; color: #e0e0e0; border: 1px solid #16213e; }
+        .card.dark-mode h2, .card.dark-mode h3 { color: #4ecca3; }
+        .card.dark-mode label { color: #e0e0e0; }
+        .card.dark-mode .upload-area { background: #16213e; border-color: #4ecca3; }
+        .card.dark-mode .upload-area p { color: #4ecca3; }
+        .card.dark-mode .detection-stats { background: #1a1a2e; }
+        .card.dark-mode .stat-value { color: #4ecca3; }
         .container { max-width: 1200px; margin: 0 auto; }
-        .header { text-align: center; color: white; margin-bottom: 40px; }
+        .header { text-align: center; color: white; margin-bottom: 40px; position: relative; }
+        .theme-toggle { position: absolute; top: 0; right: 0; }
         .header h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
         .header p { font-size: 1.1em; opacity: 0.9; }
         .tabs { display: flex; gap: 10px; margin-bottom: 30px; flex-wrap: wrap; }
@@ -181,6 +190,9 @@
         <div class="header">
             <h1>🔍 YOLOv12 Face Detection</h1>
             <p>Next-Gen face detection with Attention Mechanism</p>
+            <div class="theme-toggle">
+                <button class="tab-button" onclick="toggleDarkMode()" id="darkModeBtn">🌙 Dark Mode</button>
+            </div>
         </div>
 
         <div class="tabs">
@@ -196,11 +208,17 @@
                 
                 <div id="imageMessage" class="message"></div>
 
-                <div class="form-group">
-                    <label for="imageModel">🤖 Select Model:</label>
-                    <select id="imageModel">
-                        <option>Loading models...</option>
-                    </select>
+                <div class="form-group" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 2; min-width: 200px;">
+                        <label for="imageModel">🤖 Select Model:</label>
+                        <select id="imageModel">
+                            <option>Loading models...</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 220px; display: flex; align-items: center; gap: 12px; margin-top: 25px; padding: 10px; background: rgba(102, 126, 234, 0.1); border-radius: 8px;">
+                        <input type="checkbox" id="blurFaces" style="width: 22px; height: 22px; cursor: pointer;">
+                        <label for="blurFaces" style="margin-bottom: 0; cursor: pointer; font-weight: 600;">🕵️ Privacy Mode (Blur Faces)</label>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -237,6 +255,14 @@
 
                 <div class="result-container" id="imageResult">
                     <img id="resultImage" class="result-image" alt="Detection Result">
+
+                    <div id="gallerySection" style="display: none; margin-bottom: 20px;">
+                        <h3 style="color: #667eea; margin-bottom: 15px;">👤 Face Gallery</h3>
+                        <div id="cropsContainer" style="display: flex; gap: 10px; flex-wrap: wrap; background: #f0f2ff; padding: 15px; border-radius: 8px;">
+                            <!-- Crops will be added here -->
+                        </div>
+                    </div>
+
                     <div class="detection-stats">
                         <div class="stat-row">
                             <span class="stat-label">Faces Detected:</span>
@@ -724,10 +750,34 @@
                 }
             }, 150); // Process every 150ms (~6-7 FPS)
         }
+        // Dark Mode Toggle
+        function toggleDarkMode() {
+            const body = document.body;
+            const cards = document.querySelectorAll('.card');
+            const btn = document.getElementById('darkModeBtn');
+
+            body.classList.toggle('dark-mode');
+            cards.forEach(card => card.classList.toggle('dark-mode'));
+
+            if (body.classList.contains('dark-mode')) {
+                btn.innerHTML = '☀️ Light Mode';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                btn.innerHTML = '🌙 Dark Mode';
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // Load saved theme
+        if (localStorage.getItem('theme') === 'dark') {
+            toggleDarkMode();
+        }
+
         // Detect image
         async function detectImage() {
             const file = document.getElementById('imageFile').files[0];
             const model = document.getElementById('imageModel').value;
+            const blur = document.getElementById('blurFaces').checked;
             
             if (!file) {
                 showMessage('imageMessage', 'Please select an image', 'error');
@@ -737,6 +787,7 @@
             const formData = new FormData();
             formData.append('file', file);
             formData.append('model', model);
+            formData.append('blur', blur);
             
             document.getElementById('detectImageBtn').disabled = true;
             document.getElementById('imageProgress').style.display = 'block';
@@ -771,6 +822,32 @@
                     // Display image
                     document.getElementById('resultImage').src = data.image;
                     
+                    // Handle Gallery
+                    const cropsContainer = document.getElementById('cropsContainer');
+                    const gallerySection = document.getElementById('gallerySection');
+                    cropsContainer.innerHTML = '';
+
+                    if (data.detections.crops && data.detections.crops.length > 0) {
+                        data.detections.crops.forEach((cropBase64, index) => {
+                            const img = document.createElement('img');
+                            img.src = `data:image/jpeg;base64,${cropBase64}`;
+                            img.style.width = '80px';
+                            img.style.height = '80px';
+                            img.style.objectFit = 'cover';
+                            img.style.borderRadius = '4px';
+                            img.style.cursor = 'pointer';
+                            img.title = `Face ${index + 1}`;
+                            img.onclick = () => {
+                                const win = window.open();
+                                win.document.write(`<img src="data:image/jpeg;base64,${cropBase64}">`);
+                            };
+                            cropsContainer.appendChild(img);
+                        });
+                        gallerySection.style.display = 'block';
+                    } else {
+                        gallerySection.style.display = 'none';
+                    }
+
                     // Display detection stats
                     document.getElementById('faceCount').textContent = data.detections.count;
                     

@@ -30,8 +30,9 @@ class YOLOv12FaceDetector:
         try:
             from ultralytics import YOLO
 
-            self.yolo = YOLO(model_path)
-            print(f"Loaded YOLOv12 model from {model_path}")
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.yolo = YOLO(model_path).to(self.device)
+            print(f"Loaded YOLOv12 model from {model_path} on {self.device}")
         except ImportError:
             raise ImportError("ultralytics package not found. pip install ultralytics")
         except Exception as e:
@@ -135,6 +136,59 @@ class YOLOv12FaceDetector:
                     2,
                 )
         return result
+
+    def blur_faces(self, image, detections, blur_factor=30):
+        """Apply Gaussian blur to detected faces for privacy"""
+        result = image.copy()
+        h, w = image.shape[:2]
+
+        for det in detections:
+            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
+
+            # Ensure coordinates are within image boundaries
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+
+            if x2 > x1 and y2 > y1:
+                # Extract the face ROI from the ORIGINAL image to avoid cumulative blur
+                # but here we work on result which is a copy.
+                face_roi = image[y1:y2, x1:x2]
+
+                # Ensure kernel size is odd and based on face size
+                kw = (x2 - x1) // 2
+                kh = (y2 - y1) // 2
+
+                # Minimum kernel size for noticeable blur
+                kw = max(25, kw if kw % 2 != 0 else kw + 1)
+                kh = max(25, kh if kh % 2 != 0 else kh + 1)
+
+                # Use BORDER_DEFAULT (reflection) for better visual result
+                blurred_face = cv2.GaussianBlur(face_roi, (kw, kh), blur_factor)
+                result[y1:y2, x1:x2] = blurred_face
+
+        return result
+
+    def get_face_crops(self, image, detections, padding=0.1):
+        """Extract cropped face images from detection results"""
+        crops = []
+        h, w = image.shape[:2]
+
+        for det in detections:
+            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
+            fw, fh = x2 - x1, y2 - y1
+
+            # Add padding
+            px = int(fw * padding)
+            py = int(fh * padding)
+
+            cx1, cy1 = max(0, x1 - px), max(0, y1 - py)
+            cx2, cy2 = min(w, x2 + px), min(h, y2 + py)
+
+            if cx2 > cx1 and cy2 > cy1:
+                crop = image[cy1:cy2, cx1:cx2]
+                crops.append(crop)
+
+        return crops
 
 
 # --- GUI Class (Webcam) ---
