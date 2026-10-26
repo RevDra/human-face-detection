@@ -1,7 +1,7 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Deep Learning & Computer Vision
-torch==2.5.1+cpu
+torch==2.12.1+cpu
 torchvision==0.20.1+cpu
 ultralytics
 
