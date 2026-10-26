@@ -8,6 +8,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict
 
 import cv2
 import numpy as np
@@ -20,7 +21,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_sqlalchemy.model import Model
 from sqlalchemy.exc import OperationalError
 from werkzeug.utils import secure_filename
-from typing import Dict, Any
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
