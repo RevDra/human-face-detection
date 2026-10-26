@@ -1,15 +1,20 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
-opencv-python-headless>=4.8.0
-numpy>=1.24.3,<2.0.0
-scipy>=1.11.2
-matplotlib>=3.7.2
-Pillow>=10.1.0
-ultralytics>=8.3.0
-torch>=2.0.0
-torchvision>=0.15.0
+
+# Deep Learning & Computer Vision
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+ultralytics
+
+# Web Framework & Database
 Flask>=2.3.0
 Werkzeug>=2.3.0
-Flask-Limiter>=3.0.0
-Flask-SQLAlchemy>=3.0.0
-pymysql>=1.0.0
-cryptography>=45.0.0
+Flask-SQLAlchemy
+Flask-Limiter
+pymysql
+cryptography
+python-dotenv
+
+# Utilities
+Pillow==10.1.0
+Jinja2
+typing_extensions>=4.8.0
