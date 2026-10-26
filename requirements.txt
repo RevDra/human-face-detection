@@ -7,7 +7,7 @@ ultralytics
 
 # Web Framework & Database
 Flask>=2.3.0
-Werkzeug>=2.3.0
+Werkzeug
 Flask-SQLAlchemy
 Flask-Limiter
 pymysql
@@ -15,6 +15,6 @@ cryptography
 python-dotenv
 
 # Utilities
-Pillow==10.1.0
+Pillow
 Jinja2
 typing_extensions>=4.8.0
