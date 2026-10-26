@@ -20,6 +20,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_sqlalchemy.model import Model
 from sqlalchemy.exc import OperationalError
 from werkzeug.utils import secure_filename
+from typing import Dict, Any
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
@@ -59,7 +60,7 @@ limiter = Limiter(
 )
 
 # Model cache
-detector_cache = {}
+detector_cache: Dict[str, Any] = {}
 
 
 class Feedback(db.Model):  # type: ignore
