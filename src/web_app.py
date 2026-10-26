@@ -8,6 +8,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict
 
 import cv2
 import numpy as np
@@ -59,7 +60,7 @@ limiter = Limiter(
 )
 
 # Model cache
-detector_cache = {}
+detector_cache: Dict[str, Any] = {}
 
 
 class Feedback(db.Model):  # type: ignore
