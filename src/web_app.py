@@ -59,7 +59,7 @@ limiter = Limiter(
 )
 
 # Model cache
-detector_cache = {}
+detector_cache: dict[str, any] = {}
 
 
 class Feedback(db.Model):  # type: ignore
