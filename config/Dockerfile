@@ -9,7 +9,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Đảm bảo quyền ghi cho các thư mục data
 RUN mkdir -p data/uploads data/samples data/outputs && chmod -R 777 /app
 
 EXPOSE 7860
