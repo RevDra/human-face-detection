@@ -1,8 +1,15 @@
 """
 Human Face Detection using YOLOv12 with Live Camera Display
 Shows real-time face detection with confidence scores
-Optimized for high FPS performance using YOLOv12 Attention Mechanism
+Optimized for high FPS performance using YOLOv12 Attention Mechanism & ONNX Runtime
 """
+
+import os
+
+# Tối ưu hóa luồng CPU cho ONNX Runtime (tránh nghẽn cổ chai trên môi trường cloud/CPU)
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
+os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
 
 import torch
 
@@ -26,47 +33,109 @@ from PIL import Image, ImageTk
 class YOLOv12FaceDetector:
     """Face detection using YOLOv12 (Class name kept for compatibility)"""
 
+    # Bộ nhớ đệm Singleton giúp tái sử dụng model đã nạp, tránh đọc lại file nhiều lần
+    _instances = {}
+
+    def __new__(cls, model_path):
+        resolved_path = str(cls._resolve_model_path(model_path))
+        if resolved_path not in cls._instances:
+            instance = super().__new__(cls)
+            instance._initialized = False
+            cls._instances[resolved_path] = instance
+        return cls._instances[resolved_path]
+
+    @staticmethod
+    def _resolve_model_path(model_path):
+        """Tự động ưu tiên file .onnx nếu truyền vào đường dẫn .pt cũ"""
+        p = Path(model_path)
+        if p.suffix == ".pt":
+            onnx_p = p.with_suffix(".onnx")
+            if onnx_p.exists():
+                return onnx_p
+        return p
+
     def __init__(self, model_path):
+        if getattr(self, "_initialized", False):
+            return
+
         try:
             from ultralytics import YOLO
 
+            actual_path = self._resolve_model_path(model_path)
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.yolo = YOLO(model_path).to(self.device)
-            print(f"Loaded YOLOv12 model from {model_path} on {self.device}")
+            self.model_path = str(actual_path)
+            self.is_onnx = actual_path.suffix.lower() == ".onnx"
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            if self.is_onnx:
+                # Lưu ý: Model ONNX trong Ultralytics KHÔNG gọi .to(device) khi khởi tạo
+                # mà truyền device trực tiếp lúc suy luận (inference)
+                self.yolo = YOLO(self.model_path, task="detect")
+            else:
+                self.yolo = YOLO(self.model_path).to(self.device)
+
+            self._initialized = True
+            print(f"Loaded YOLOv12 model from {self.model_path} on {self.device}")
         except ImportError:
-            raise ImportError("ultralytics package not found. pip install ultralytics")
+            raise ImportError(
+                "ultralytics or onnxruntime package not found. pip install ultralytics onnxruntime"
+            )
         except Exception as e:
             raise Exception(f"Failed to load model: {e}")
 
+    def _extract_detections(self, results, scale=1.0):
+        """Hàm nội bộ trích xuất bounding boxes tối ưu tốc độ"""
+        detections = []
+        inv_scale = 1.0 / scale if scale < 1.0 else 1.0
+
+        for result in results:
+            if result.boxes is None or len(result.boxes) == 0:
+                continue
+
+            # Chuyển toàn bộ tensor sang numpy mảng 1 lần thay vì gọi trong từng vòng lặp
+            xyxys = result.boxes.xyxy.cpu().numpy()
+            confs = result.boxes.conf.cpu().numpy()
+
+            for box_coords, conf_val in zip(xyxys, confs):
+                x1, y1, x2, y2 = box_coords
+                if scale < 1.0:
+                    x1, y1, x2, y2 = (
+                        int(x1 * inv_scale),
+                        int(y1 * inv_scale),
+                        int(x2 * inv_scale),
+                        int(y2 * inv_scale),
+                    )
+                else:
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+
+                detections.append(
+                    {
+                        "x1": x1,
+                        "y1": y1,
+                        "x2": x2,
+                        "y2": y2,
+                        "confidence": float(conf_val),
+                        "w": x2 - x1,
+                        "h": y2 - y1,
+                        "cx": (x1 + x2) // 2,
+                        "cy": (y1 + y2) // 2,
+                    }
+                )
+        return detections
+
     def detect_faces(self, image, conf_threshold=0.32):
         """Standard detection"""
-        detections = []
         try:
-            results = self.yolo(image, conf=conf_threshold, verbose=False)
-            for result in results:
-                for box in result.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
-                    conf = float(box.conf[0].cpu().numpy())
-                    detections.append(
-                        {
-                            "x1": x1,
-                            "y1": y1,
-                            "x2": x2,
-                            "y2": y2,
-                            "confidence": conf,
-                            "w": x2 - x1,
-                            "h": y2 - y1,
-                            "cx": (x1 + x2) // 2,
-                            "cy": (y1 + y2) // 2,
-                        }
-                    )
+            results = self.yolo(
+                image, conf=conf_threshold, device=self.device, verbose=False
+            )
+            return self._extract_detections(results, scale=1.0)
         except Exception as e:
             print(f"Detection error: {e}")
-        return detections
+            return []
 
     def detect_faces_optimized(self, image, conf_threshold=0.32, max_width=640):
         """Optimized detection with resize"""
-        detections = []
         try:
             height, width = image.shape[:2]
             if width > max_width:
@@ -77,37 +146,13 @@ class YOLOv12FaceDetector:
                 scale = 1.0
                 inference_image = image
 
-            results = self.yolo(inference_image, conf=conf_threshold, verbose=False)
-
-            for result in results:
-                for box in result.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
-                    conf = float(box.conf[0].cpu().numpy())
-
-                    if scale < 1.0:
-                        x1, y1, x2, y2 = (
-                            int(x1 / scale),
-                            int(y1 / scale),
-                            int(x2 / scale),
-                            int(y2 / scale),
-                        )
-
-                    detections.append(
-                        {
-                            "x1": x1,
-                            "y1": y1,
-                            "x2": x2,
-                            "y2": y2,
-                            "confidence": conf,
-                            "w": x2 - x1,
-                            "h": y2 - y1,
-                            "cx": (x1 + x2) // 2,
-                            "cy": (y1 + y2) // 2,
-                        }
-                    )
+            results = self.yolo(
+                inference_image, conf=conf_threshold, device=self.device, verbose=False
+            )
+            return self._extract_detections(results, scale=scale)
         except Exception as e:
             print(f"Detection error: {e}")
-        return detections
+            return []
 
     def draw_faces(self, image, detections, color=(0, 255, 0), thickness=2, show_confidence=True):
         result = image.copy()
@@ -150,8 +195,6 @@ class YOLOv12FaceDetector:
             x2, y2 = min(w, x2), min(h, y2)
 
             if x2 > x1 and y2 > y1:
-                # Extract the face ROI from the ORIGINAL image to avoid cumulative blur
-                # but here we work on result which is a copy.
                 face_roi = image[y1:y2, x1:x2]
 
                 # Ensure kernel size is odd and based on face size
@@ -162,7 +205,6 @@ class YOLOv12FaceDetector:
                 kw = max(25, kw if kw % 2 != 0 else kw + 1)
                 kh = max(25, kh if kh % 2 != 0 else kh + 1)
 
-                # Use BORDER_DEFAULT (reflection) for better visual result
                 blurred_face = cv2.GaussianBlur(face_roi, (kw, kh), blur_factor)
                 result[y1:y2, x1:x2] = blurred_face
 
@@ -216,7 +258,7 @@ class WebcamFaceDetectionGUI:
             return
 
         self.root = tk.Tk()
-        self.root.title(f"YOLOv12 Face Detection - {Path(model_path).stem}")
+        self.root.title(f"YOLOv12 Face Detection - {Path(self.detector.model_path).stem}")
         self.root.geometry("1024x768")
 
         # UI Setup
@@ -238,9 +280,10 @@ class WebcamFaceDetectionGUI:
 
         control_frame = tk.Frame(self.root, bg="lightgray")
         control_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+        engine_label = "ONNX" if self.detector.is_onnx else "PyTorch"
         self.status_label = Label(
             control_frame,
-            text="Running YOLOv12",
+            text=f"Running YOLOv12 ({engine_label})",
             bg="lightgray",
             fg="green",
             font=("Arial", 10, "bold"),
@@ -404,7 +447,7 @@ def display_image_with_detections(image, title="Result"):
 # --- Main Menu Logic ---
 def select_model_level(script_dir):
     print("\n" + "-" * 40)
-    print("  SELECT MODEL SIZE (YOLOv12):")
+    print("  SELECT MODEL SIZE (YOLOv12 ONNX):")
     print("  1. Nano   (yolov12n) - Super light")
     print("  2. Small  (yolov12s) - Basic")
     print("  3. Medium (yolov12m) - Sweet spot")
@@ -412,10 +455,10 @@ def select_model_level(script_dir):
     print("-" * 40)
 
     mapping = {
-        "1": "yolov12n-face.pt",
-        "2": "yolov12s-face.pt",
-        "3": "yolov12m-face.pt",
-        "4": "yolov12l-face.pt",
+        "1": "yolov12n-face.onnx",
+        "2": "yolov12s-face.onnx",
+        "3": "yolov12m-face.onnx",
+        "4": "yolov12l-face.onnx",
     }
 
     while True:
@@ -426,8 +469,13 @@ def select_model_level(script_dir):
         if choice in mapping:
             model_name = mapping[choice]
             model_path = script_dir / model_name
+            # Fallback kiểm tra ở thư mục models/ nếu để chung trong cấu trúc repo
+            alt_model_path = script_dir.parent / "models" / model_name
+
             if model_path.exists():
                 return str(model_path)
+            elif alt_model_path.exists():
+                return str(alt_model_path)
             else:
                 print(f"  [!] Error: File {model_name} not found in {script_dir}")
         else:
@@ -472,23 +520,23 @@ def choose_and_process_file(script_dir):
 if __name__ == "__main__":
     script_dir = Path(__file__).parent
     required_models = [
-        "yolov12n-face.pt",
-        "yolov12s-face.pt",
-        "yolov12m-face.pt",
-        "yolov12l-face.pt",
+        "yolov12n-face.onnx",
+        "yolov12s-face.onnx",
+        "yolov12m-face.onnx",
+        "yolov12l-face.onnx",
     ]
 
-    print("Checking models...")
+    print("Checking ONNX models...")
     found_any = False
     for m in required_models:
-        if (script_dir / m).exists():
+        if (script_dir / m).exists() or (script_dir.parent / "models" / m).exists():
             print(f"  [OK] Found {m}")
             found_any = True
         else:
             print(f"  [MISSING] {m}")
 
     if not found_any:
-        print("\nERROR: No YOLOv12 models found! Please place .pt files in this folder.")
+        print("\nERROR: No YOLOv12 ONNX models found! Please place .onnx files in this folder.")
     else:
         try:
             choose_and_process_file(script_dir)
