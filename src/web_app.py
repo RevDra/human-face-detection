@@ -5,6 +5,7 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 """
 
 import os
+
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
@@ -62,6 +63,7 @@ limiter = Limiter(
     default_limits=["10000 per day", "1000 per hour"],
     storage_uri="memory://",
 )
+
 
 class Feedback(db.Model):  # type: ignore
     __tablename__ = "feedbacks"
@@ -161,7 +163,7 @@ def detect_image():
         # Đổi logic dự phòng (fallback) sang bản ONNX Small thay vì Large
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
-            
+
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Small).")
             model = "yolov12s-face.onnx"
@@ -248,7 +250,7 @@ def detect_video():
         model = request.form.get("model", "yolov12m-face.onnx")
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
-            
+
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Medium).")
             model = "yolov12m-face.onnx"
