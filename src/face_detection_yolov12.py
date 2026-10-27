@@ -126,9 +126,7 @@ class YOLOv12FaceDetector:
     def detect_faces(self, image, conf_threshold=0.32):
         """Standard detection"""
         try:
-            results = self.yolo(
-                image, conf=conf_threshold, device=self.device, verbose=False
-            )
+            results = self.yolo(image, conf=conf_threshold, device=self.device, verbose=False)
             return self._extract_detections(results, scale=1.0)
         except Exception as e:
             print(f"Detection error: {e}")
