@@ -25,6 +25,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import Label
+from typing import Any, Dict
 
 import cv2
 from PIL import Image, ImageTk
@@ -33,8 +34,7 @@ from PIL import Image, ImageTk
 class YOLOv12FaceDetector:
     """Face detection using YOLOv12 (Class name kept for compatibility)"""
 
-    # Bộ nhớ đệm Singleton giúp tái sử dụng model đã nạp, tránh đọc lại file nhiều lần
-    _instances = {}
+    _instances: dict[str, Any] = {}
 
     def __new__(cls, model_path):
         resolved_path = str(cls._resolve_model_path(model_path))
