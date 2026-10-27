@@ -23,6 +23,7 @@ View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 - Attention-based detection for small, distant, or occluded faces.
 - Interactive bounding boxes with cropped face previews.
 - Download annotated results and face statistics.
+- Privacy mode for images is here to blur faces in the output.
 
 ### 📹 Live Webcam
 - Real-time detection directly from your browser.
@@ -34,10 +35,10 @@ View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 - Ready for admin dashboard visualization.
 
 ### 🤖 Model Selection
-- **YOLOv12 Nano** (yolov12n-face.pt) - Super Fast, best for CPU/Webcam.
-- **YOLOv12 Small** (yolov12s-face.pt) - Balanced speed & accuracy.
-- **YOLOv12 Medium** (yolov12m-face.pt) - High precision (The "Sweet Spot").
-- **YOLOv12 Large** (yolov12l-face.pt) - State-of-the-art accuracy for high-res images.
+- **YOLOv12 Nano** (yolov12n-face.onnx) - Super Fast, best for CPU/Webcam.
+- **YOLOv12 Small** (yolov12s-face.onnx) - Balanced speed & accuracy.
+- **YOLOv12 Medium** (yolov12m-face.onnx) - High precision (The "Sweet Spot").
+- **YOLOv12 Large** (yolov12l-face.onnx) - State-of-the-art accuracy for high-res images.
 
 ---
 
@@ -367,5 +368,5 @@ This entire project is licensed under the AGPL-3.0 to comply with the licensing 
 
 ---
 
-**Last Updated:** October 26, 2026 |
+**Last Updated:** October 28, 2026 |
 **Status:** ✅ Production Ready
