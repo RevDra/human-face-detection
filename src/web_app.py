@@ -1,11 +1,19 @@
 """
-Flask Web Application for YOLOv12 Face Detection
+Flask Web Application for YOLOv12 Face Detection (ONNX Backend)
 Supports image upload, video upload, and live webcam streaming
+Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 """
+
+import os
+
+# --- TỐI ƯU HÓA LUỒNG CPU CHO ONNX RUNTIME (BẮT BUỘC) ---
+# Thiết lập trước khi import cv2, numpy hay torch để tránh cấp phát quá tải luồng CPU
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
+os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
 
 import base64
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
@@ -18,8 +26,6 @@ from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
-from flask_sqlalchemy.model import Model
-from sqlalchemy.exc import OperationalError
 from werkzeug.utils import secure_filename
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
@@ -40,14 +46,16 @@ PROJECT_ROOT = Path(__file__).parent.parent
 UPLOAD_FOLDER = PROJECT_ROOT / "data" / "uploads"
 MODELS_DIR = PROJECT_ROOT / "models"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "mp4", "avi", "mov", "mkv"}
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
+MAX_FILE_SIZE = 1024 * 1024 * 1024  # 500MB
+
+# CHUYỂN ĐỔI SANG ĐỊNH DẠNG ONNX
 ALLOWED_MODELS = {
-    "yolov12n-face.pt",
-    "yolov12s-face.pt",
-    "yolov12m-face.pt",
-    "yolov12l-face.pt",
+    "yolov12n-face.onnx",
+    "yolov12s-face.onnx",
+    "yolov12m-face.onnx",
+    "yolov12l-face.onnx",
 }
-UPLOAD_FOLDER.mkdir(exist_ok=True)
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
@@ -58,10 +66,6 @@ limiter = Limiter(
     default_limits=["10000 per day", "1000 per hour"],
     storage_uri="memory://",
 )
-
-# Model cache
-detector_cache: Dict[str, Any] = {}
-
 
 class Feedback(db.Model):  # type: ignore
     __tablename__ = "feedbacks"
@@ -82,34 +86,40 @@ with app.app_context():
 
 
 def get_detector(model_name):
-    """Get or create detector instance (cached)"""
+    """
+    Get or create detector instance.
+    The YOLOv12FaceDetector class natively handles Singleton caching internally,
+    so we don't need a manual dictionary cache here anymore.
+    """
     safe_name = secure_filename(model_name)
+
+    # Đảm bảo fallback tự động nếu request cũ vẫn gửi tên file .pt
+    if safe_name.endswith(".pt"):
+        safe_name = safe_name.replace(".pt", ".onnx")
 
     if safe_name not in ALLOWED_MODELS:
         logging.error(f"Attempt to load unsupported model: {safe_name}")
         raise ValueError(f"Unsupported model: {safe_name}")
 
-    if safe_name not in detector_cache:
-        model_path = MODELS_DIR / safe_name
+    model_path = MODELS_DIR / safe_name
 
-        try:
-            final_path = model_path.resolve()
-            safe_root = MODELS_DIR.resolve()
-            if not str(final_path).startswith(str(safe_root)):
-                logging.error(f"Security Alert: Symlink attack detected! {final_path}")
-                raise ValueError("Invalid model path (Symlink violation)")
+    try:
+        final_path = model_path.resolve()
+        safe_root = MODELS_DIR.resolve()
+        if not str(final_path).startswith(str(safe_root)):
+            logging.error(f"Security Alert: Symlink attack detected! {final_path}")
+            raise ValueError("Invalid model path (Symlink violation)")
 
-        except Exception as e:
-            logging.error(f"Error resolving model path: {str(e)}")
-            raise FileNotFoundError(f"Model path error: {str(e)}")
+    except Exception as e:
+        logging.error(f"Error resolving model path: {str(e)}")
+        raise FileNotFoundError(f"Model path error: {str(e)}")
 
-        if not final_path.exists():
-            logging.error(f"Model file not found: {final_path}")
-            raise FileNotFoundError(f"Model not found: {final_path}")
+    if not final_path.exists():
+        logging.error(f"Model file not found: {final_path}")
+        raise FileNotFoundError(f"Model not found: {final_path}")
 
-        detector_cache[safe_name] = YOLOv12FaceDetector(str(final_path))
-
-    return detector_cache[safe_name]
+    # Khởi tạo (Lớp YOLOv12FaceDetector đã thiết kế Singleton __new__)
+    return YOLOv12FaceDetector(str(final_path))
 
 
 def allowed_file(filename):
@@ -150,14 +160,18 @@ def detect_image():
             return jsonify({"error": "Only image files allowed"}), 400
 
         # Get parameters
-        model = request.form.get("model", "yolov12l-face.pt")
+        model = request.form.get("model", "yolov12s-face.onnx")
         blur = request.form.get("blur") == "true"
 
+        # Đổi logic dự phòng (fallback) sang bản ONNX Small thay vì Large
+        if not model.endswith(".onnx"):
+            model = model.replace(".pt", ".onnx")
+            
         if model not in ALLOWED_MODELS:
-            app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
-            model = "yolov12l-face.pt"
+            app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Small).")
+            model = "yolov12s-face.onnx"
 
-        # Get detector
+        # Lấy instance (đã được cache ở RAM)
         detector = get_detector(model)
 
         # Read image directly from file object
@@ -168,10 +182,8 @@ def detect_image():
         # For webcam frames, use optimized detection with reduced resolution
         is_webcam = "webcam" in file.filename.lower()
         if is_webcam:
-            # Use optimized detection for speed
             detections = detector.detect_faces_optimized(image, conf_threshold=0.32, max_width=480)
         else:
-            # Use standard detection for uploaded files
             detections = detector.detect_faces(image, conf_threshold=0.32)
 
         # Process image: Draw or Blur
@@ -238,10 +250,13 @@ def detect_video():
             return jsonify({"error": "Only video files allowed"}), 400
 
         # Get model selection
-        model = request.form.get("model", "yolov12m-face.pt")
+        model = request.form.get("model", "yolov12m-face.onnx")
+        if not model.endswith(".onnx"):
+            model = model.replace(".pt", ".onnx")
+            
         if model not in ALLOWED_MODELS:
-            app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
-            model = "yolov12m-face.pt"
+            app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Medium).")
+            model = "yolov12m-face.onnx"
 
         # Save uploaded file
         filename = secure_filename(file.filename)
@@ -268,7 +283,6 @@ def detect_video():
         return jsonify(response)
 
     except Exception:
-        # Log the full exception server-side without exposing details to the client
         app.logger.exception("Error while processing video detection request")
         return jsonify({"error": "Internal server error"}), 500
 
@@ -283,37 +297,36 @@ def download_file(filename):
 
         return send_file(filepath, as_attachment=True)
     except Exception as e:
-        # Log the full exception server-side without exposing details to the client
         app.logger.exception("Error while processing download request for %s", filename)
         return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/api/models", methods=["GET"])
 def get_models():
-    """Get ALL available models for dropdown selection"""
+    """Get ALL available ONNX models for dropdown selection"""
     models = {
         "nano": {
-            "name": "yolov12n-face.pt",
-            "label": "Nano (n) - Fastest",
+            "name": "yolov12n-face.onnx",
+            "label": "Nano (n) - Fastest (ONNX)",
             "description": "Real-time speed, best for CPU/Webcam",
             "size": "Smallest",
         },
         "small": {
-            "name": "yolov12s-face.pt",
-            "label": "Small (s) - Balanced",
+            "name": "yolov12s-face.onnx",
+            "label": "Small (s) - Balanced (ONNX)",
             "description": "Good balance of speed and accuracy",
             "size": "Small",
         },
         "medium": {
-            "name": "yolov12m-face.pt",
-            "label": "Medium (m) - High Precision",
-            "description": "High accuracy, requires decent GPU",
+            "name": "yolov12m-face.onnx",
+            "label": "Medium (m) - High Precision (ONNX)",
+            "description": "High accuracy, optimized CPU execution",
             "size": "Medium",
         },
         "large": {
-            "name": "yolov12l-face.pt",
-            "label": "Large (l) - Max Accuracy",
-            "description": "Best detection quality, slowest speed",
+            "name": "yolov12l-face.onnx",
+            "label": "Large (l) - Max Accuracy (ONNX)",
+            "description": "Best detection quality",
             "size": "Large",
         },
     }
@@ -353,7 +366,7 @@ def submit_feedback():
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "Face Detection API"})
+    return jsonify({"status": "healthy", "service": "Face Detection ONNX API"})
 
 
 @app.errorhandler(413)
@@ -385,7 +398,7 @@ def handle_rate_limit_error(e):
 
 if __name__ == "__main__":
     print("\n" + "=" * 70)
-    print("🌐 Starting YOLOv12 Face Detection Web Server")
+    print("🌐 Starting YOLOv12 Face Detection Web Server (ONNX Optimized)")
     print("=" * 70)
     print("\n📍 Server: http://localhost:7860")
     print("📁 Upload folder: ", UPLOAD_FOLDER)
@@ -394,12 +407,12 @@ if __name__ == "__main__":
     print("   GET  /                    - Web interface")
     print("   POST /api/detect-image    - Detect faces in image")
     print("   POST /api/detect-video    - Detect faces in video")
-    print("   GET  /api/models          - Get available models")
+    print("   GET  /api/models          - Get available ONNX models")
     print("   GET  /api/health          - Health check")
     print("\n" + "=" * 70 + "\n")
 
     # Determine debug mode from environment (default: disabled)
     debug_mode = os.getenv("FLASK_ENV") == "development"
 
-    # Run Flask app
+    # Hạn chế chạy đa luồng ở mức app (app.run) vì Gunicorn sẽ chịu trách nhiệm việc này trên Cloud
     app.run(host="0.0.0.0", port=7860, debug=debug_mode, use_reloader=False)
