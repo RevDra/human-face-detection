@@ -13,9 +13,23 @@ class YOLOv12FaceDetector:
     """
 
     _instances: dict[str, Any] = {}
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    _MODELS_DIR = (_PROJECT_ROOT / "models").resolve()
+
+    @classmethod
+    def _resolve_model_path(cls, model_path: str) -> Path:
+        candidate = Path(model_path)
+        if not candidate.is_absolute():
+            candidate = cls._MODELS_DIR / candidate
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(cls._MODELS_DIR)
+        except ValueError as exc:
+            raise ValueError("Model path is outside the allowed models directory.") from exc
+        return resolved
 
     def __new__(cls, model_path="yolov12n-face.onnx"):
-        resolved_path = str(Path(model_path).resolve())
+        resolved_path = str(cls._resolve_model_path(str(model_path)))
         if resolved_path not in cls._instances:
             instance = super(YOLOv12FaceDetector, cls).__new__(cls)
             instance._initialized = False
@@ -26,7 +40,7 @@ class YOLOv12FaceDetector:
         if getattr(self, "_initialized", False):
             return
 
-        model_file = Path(model_path)
+        model_file = self._resolve_model_path(str(model_path))
         if not model_file.exists():
             raise FileNotFoundError(
                 f"Không tìm thấy tệp mô hình: {model_file}\n"
