@@ -18,9 +18,12 @@ class YOLOv12FaceDetector:
 
     @classmethod
     def _resolve_model_path(cls, model_path: str) -> Path:
-        candidate = Path(model_path)
-        if not candidate.is_absolute():
-            candidate = cls._MODELS_DIR / candidate
+        raw_value = str(model_path)
+        safe_name = Path(raw_value).name
+        if safe_name != raw_value:
+            raise ValueError("Model path must be a file name within the models directory.")
+
+        candidate = cls._MODELS_DIR / safe_name
         resolved = candidate.resolve()
         try:
             resolved.relative_to(cls._MODELS_DIR)
