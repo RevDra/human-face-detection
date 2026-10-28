@@ -2,14 +2,13 @@
 
 ## 📦 Supported Versions
 
-Only the latest stable release is currently supported with security updates.
+Only the latest stable release and current major line are supported with security updates.
 
 | Version | Supported          | Notes |
 | :-----: | :----------------: | :---- |
-| **1.3.x** | ✔️ | **Latest features with highest security**|
-| **1.2.x** | :white_check_mark: | **Stable** (Training Pipeline, Secure Env, API, Docker) |
-| 1.1.x   | :warning:          | Deprecated (No active security updates, please upgrade) |
-| 1.0.x   | :x:                | Vulnerable / Unsupported |
+| **1.4.x** | :white_check_mark: | **Latest Release (Zero-PyTorch, Pure ONNX Runtime)** |
+| 1.3.x  | :warning:          | Deprecated (No active security updates, please upgrade) |
+| 1.0.x - 1.2.x | :x:        | Vulnerable / Unsupported |
 
 ## 🐞 Reporting a Vulnerability
 
@@ -29,28 +28,29 @@ We strongly encourage you to use GitHub's **Private Vulnerability Reporting** fe
 If you are unable to use the GitHub reporting tool, you can send an email to: **luongminhngoc0@gmail.com**
 
 Please include:
-* Description of the vulnerability.
-* Steps to reproduce the issue.
-* Potential impact.
+- Description of the vulnerability.
+- Steps to reproduce the issue.
+- Potential impact.
 
 ### What to Expect
-* We will acknowledge your report within **48 hours**.
-* We will verify the issue and keep you updated on the progress.
-* Once fixed, a patch will be released, and you will be credited (if you wish) in the release notes.
+- We will acknowledge your report within **48 hours**.
+- We will verify the issue and keep you updated on the progress.
+- Once fixed, a patch will be released, and you will be credited (if you wish) in the release notes.
 
 ## 🔒 Security Scope
 
 ### In Scope
-* Vulnerabilities in the Flask Web Application code (`src/web_app.py`).
-* Issues with the Docker configuration (`Dockerfile`, `docker-compose.yml`).
-* Cross-Site Scripting (XSS) or File Upload vulnerabilities in the web interface.
+- Vulnerabilities in the Flask Web Application code (`src/web_app.py`).
+- Issues with the ONNX Runtime face detection engine (`src/face_detection_yolov12.py`).
+- Issues with the Docker configuration (`Dockerfile`, `docker-compose.yml`)[cite: 5].
+- Cross-Site Scripting (XSS), insecure model loading, or unsafe File Upload/Processing vulnerabilities in the web interface.
 
 ### Out of Scope
-* Vulnerabilities in third-party libraries (e.g., `ultralytics`, `pytorch`, `flask`). Please report those to the respective maintainers.
-* Attacks requiring physical access to the user's device.
-* Spam or social engineering attacks.
+- Vulnerabilities in third-party inference libraries (e.g., `onnxruntime`, `opencv-python`, `flask`). Please report those to the respective maintainers.
+- Attacks requiring physical access to the user's device.
+- Spam or social engineering attacks.
 
 ## ⚠️ Important Note for Users
-This application is designed for **Research and Educational purposes**.
-* **Do not** deploy this application to the public internet without adding an Authentication layer (e.g., Nginx Basic Auth, OAuth).
-* The default configuration runs in "Development Mode" or basic Gunicorn mode without built-in user management.
+This application is designed for **Research, Educational, and Development purposes**.
+- **Do not** deploy this application to the public internet without adding an Authentication layer (e.g., Nginx Basic Auth, OAuth).
+- The default configuration runs in standard web server mode without built-in multi-user authentication management.
