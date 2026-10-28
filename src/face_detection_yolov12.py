@@ -11,9 +11,16 @@ class YOLOv12FaceDetector:
     Áp dụng Singleton Pattern để cache phiên làm việc (InferenceSession) trong RAM.
     """
 
+    _models_dir = (Path(__file__).resolve().parent.parent / "models").resolve()
     _instances = {}
 
-    def __new__(cls, model_path="yolov12n-face.onnx"):
+        candidate_path = Path(model_path).resolve()
+        try:
+            candidate_path.relative_to(cls._models_dir)
+        except ValueError:
+            raise ValueError("Đường dẫn mô hình không hợp lệ: phải nằm trong thư mục 'models/'.")
+
+        resolved_path = str(candidate_path)
         resolved_path = str(Path(model_path).resolve())
         if resolved_path not in cls._instances:
             instance = super(YOLOv12FaceDetector, cls).__new__(cls)
@@ -24,6 +31,11 @@ class YOLOv12FaceDetector:
     def __init__(self, model_path="yolov12n-face.onnx"):
         if getattr(self, "_initialized", False):
             return
+        model_file = Path(model_path).resolve()
+        try:
+            model_file.relative_to(self._models_dir)
+        except ValueError:
+            raise ValueError("Đường dẫn mô hình không hợp lệ: phải nằm trong thư mục 'models/'.")
 
         model_file = Path(model_path)
         if not model_file.exists():
