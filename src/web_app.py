@@ -120,7 +120,7 @@ def get_detector(model_name):
         raise FileNotFoundError(f"Model not found: {final_path}")
 
     # Khởi tạo (Lớp YOLOv12FaceDetector đã thiết kế Singleton __new__)
-    return YOLOv12FaceDetector(str(final_path))
+    return YOLOv12FaceDetector(final_path.name)
 
 
 def allowed_file(filename):
