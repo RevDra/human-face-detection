@@ -190,8 +190,8 @@ Human_face_detection/
 │   └── DEPLOYMENT_GUIDE.md             # Detailed deployment guide
 │
 ├── models/                             # YOLOv12 Models
-│   ├── yolov12n-face.pt                # Nano model (Fastest)
-│   ├── yolov12s-face.pt                # Small model (Balanced)
+│   ├── yolov12n-face.onnx              # Nano model (Fastest)
+│   ├── yolov12s-face.onnx              # Small model (Balanced)
 │   ├── MODELS.md                       # Download instructions for Med/Large models
 │   └── training/                       # Source code & benchmarks (Loss, PR curves, etc.)
 │
