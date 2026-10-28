@@ -1,9 +1,9 @@
-from pathlib import Path
-
 import cv2
 import numpy as np
 import onnxruntime as ort
+from pathlib import Path
 from typing import Any, Dict
+
 
 class YOLOv12FaceDetector:
     """
@@ -11,16 +11,9 @@ class YOLOv12FaceDetector:
     Áp dụng Singleton Pattern để cache phiên làm việc (InferenceSession) trong RAM.
     """
 
-    _models_dir = (Path(__file__).resolve().parent.parent / "models").resolve()
     _instances: dict[str, Any] = {}
 
-        candidate_path = Path(model_path).resolve()
-        try:
-            candidate_path.relative_to(cls._models_dir)
-        except ValueError:
-            raise ValueError("Đường dẫn mô hình không hợp lệ: phải nằm trong thư mục 'models/'.")
-
-        resolved_path = str(candidate_path)
+    def __new__(cls, model_path="yolov12n-face.onnx"):
         resolved_path = str(Path(model_path).resolve())
         if resolved_path not in cls._instances:
             instance = super(YOLOv12FaceDetector, cls).__new__(cls)
@@ -31,12 +24,8 @@ class YOLOv12FaceDetector:
     def __init__(self, model_path="yolov12n-face.onnx"):
         if getattr(self, "_initialized", False):
             return
-        model_file = Path(model_path).resolve()
-        try:
-            model_file.relative_to(self._models_dir)
-        except ValueError:
-            raise ValueError("Đường dẫn mô hình không hợp lệ: phải nằm trong thư mục 'models/'.")
 
+        model_file = Path(model_path)
         if not model_file.exists():
             raise FileNotFoundError(
                 f"Không tìm thấy tệp mô hình: {model_file}\n"
@@ -55,8 +44,7 @@ class YOLOv12FaceDetector:
         # Tự động ưu tiên OpenVINO hoặc CUDA nếu môi trường có hỗ trợ, fallback về CPU
         available_providers = ort.get_available_providers()
         preferred_providers = [
-            p
-            for p in [
+            p for p in [
                 "OpenVINOExecutionProvider",
                 "CUDAExecutionProvider",
                 "CPUExecutionProvider",
@@ -165,19 +153,17 @@ class YOLOv12FaceDetector:
                 bx2 = int(max(0, min(img_w, bx1 + bw)))
                 by2 = int(max(0, min(img_h, by1 + bh)))
 
-                detections.append(
-                    {
-                        "x1": bx1,
-                        "y1": by1,
-                        "x2": bx2,
-                        "y2": by2,
-                        "confidence": float(scores[idx]),
-                        "w": bx2 - bx1,
-                        "h": by2 - by1,
-                        "cx": (bx1 + bx2) // 2,
-                        "cy": (by1 + by2) // 2,
-                    }
-                )
+                detections.append({
+                    "x1": bx1,
+                    "y1": by1,
+                    "x2": bx2,
+                    "y2": by2,
+                    "confidence": float(scores[idx]),
+                    "w": bx2 - bx1,
+                    "h": by2 - by1,
+                    "cx": (bx1 + bx2) // 2,
+                    "cy": (by1 + by2) // 2,
+                })
 
         return detections
 
@@ -263,9 +249,7 @@ def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0
     return detections
 
 
-def detect_from_video(
-    video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2
-):
+def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2):
     """
     Xử lý video kết hợp kỹ thuật Frame Striding (mặc định nhảy bước 2 frame)
     giúp tăng gấp đôi tốc độ render video mà mắt thường không nhận ra độ trễ.
