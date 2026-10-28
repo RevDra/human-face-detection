@@ -67,6 +67,7 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+
 class Feedback(db.Model):  # type: ignore
     __tablename__ = "feedbacks"
     id = db.Column(db.Integer, primary_key=True)
@@ -166,7 +167,7 @@ def detect_image():
         # Đổi logic dự phòng (fallback) sang bản ONNX Small thay vì Large
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
-            
+
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Small).")
             model = "yolov12s-face.onnx"
@@ -253,7 +254,7 @@ def detect_video():
         model = request.form.get("model", "yolov12m-face.onnx")
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
-            
+
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Medium).")
             model = "yolov12m-face.onnx"
