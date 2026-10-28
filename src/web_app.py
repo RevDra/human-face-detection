@@ -6,6 +6,8 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 
 import os
 
+# --- TỐI ƯU HÓA LUỒNG CPU CHO ONNX RUNTIME (BẮT BUỘC) ---
+# Thiết lập trước khi import cv2, numpy hay torch để tránh cấp phát quá tải luồng CPU
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
@@ -46,6 +48,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "mp4", "avi", "mov", "mkv"}
 MAX_FILE_SIZE = 1024 * 1024 * 1024  # 500MB
 
+# CHUYỂN ĐỔI SANG ĐỊNH DẠNG ONNX
 ALLOWED_MODELS = {
     "yolov12n-face.onnx",
     "yolov12s-face.onnx",
@@ -63,7 +66,6 @@ limiter = Limiter(
     default_limits=["10000 per day", "1000 per hour"],
     storage_uri="memory://",
 )
-
 
 class Feedback(db.Model):  # type: ignore
     __tablename__ = "feedbacks"
@@ -91,6 +93,7 @@ def get_detector(model_name):
     """
     safe_name = secure_filename(model_name)
 
+    # Đảm bảo fallback tự động nếu request cũ vẫn gửi tên file .pt
     if safe_name.endswith(".pt"):
         safe_name = safe_name.replace(".pt", ".onnx")
 
@@ -163,7 +166,7 @@ def detect_image():
         # Đổi logic dự phòng (fallback) sang bản ONNX Small thay vì Large
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
-
+            
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Small).")
             model = "yolov12s-face.onnx"
@@ -187,7 +190,7 @@ def detect_image():
         if blur:
             result_image = detector.blur_faces(image, detections)
         else:
-            result_image = detector.draw_faces(image, detections, show_confidence=True)
+            result_image = detector.draw_faces(image, detections, show_conf=True)
 
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
@@ -250,7 +253,7 @@ def detect_video():
         model = request.form.get("model", "yolov12m-face.onnx")
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
-
+            
         if model not in ALLOWED_MODELS:
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Medium).")
             model = "yolov12m-face.onnx"
@@ -410,4 +413,6 @@ if __name__ == "__main__":
 
     # Determine debug mode from environment (default: disabled)
     debug_mode = os.getenv("FLASK_ENV") == "development"
+
+    # Hạn chế chạy đa luồng ở mức app (app.run) vì Gunicorn sẽ chịu trách nhiệm việc này trên Cloud
     app.run(host="0.0.0.0", port=7860, debug=debug_mode, use_reloader=False)
