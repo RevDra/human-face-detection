@@ -3,7 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import onnxruntime as ort
-
+from typing import Any, Dict
 
 class YOLOv12FaceDetector:
     """
@@ -12,7 +12,7 @@ class YOLOv12FaceDetector:
     """
 
     _models_dir = (Path(__file__).resolve().parent.parent / "models").resolve()
-    _instances = {}
+    _instances: dict[str, Any] = {}
 
         candidate_path = Path(model_path).resolve()
         try:
