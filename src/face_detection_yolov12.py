@@ -1,8 +1,9 @@
+from pathlib import Path
+from typing import Any, Dict
+
 import cv2
 import numpy as np
 import onnxruntime as ort
-from pathlib import Path
-from typing import Any, Dict
 
 
 class YOLOv12FaceDetector:
@@ -44,7 +45,8 @@ class YOLOv12FaceDetector:
         # Tự động ưu tiên OpenVINO hoặc CUDA nếu môi trường có hỗ trợ, fallback về CPU
         available_providers = ort.get_available_providers()
         preferred_providers = [
-            p for p in [
+            p
+            for p in [
                 "OpenVINOExecutionProvider",
                 "CUDAExecutionProvider",
                 "CPUExecutionProvider",
@@ -153,17 +155,19 @@ class YOLOv12FaceDetector:
                 bx2 = int(max(0, min(img_w, bx1 + bw)))
                 by2 = int(max(0, min(img_h, by1 + bh)))
 
-                detections.append({
-                    "x1": bx1,
-                    "y1": by1,
-                    "x2": bx2,
-                    "y2": by2,
-                    "confidence": float(scores[idx]),
-                    "w": bx2 - bx1,
-                    "h": by2 - by1,
-                    "cx": (bx1 + bx2) // 2,
-                    "cy": (by1 + by2) // 2,
-                })
+                detections.append(
+                    {
+                        "x1": bx1,
+                        "y1": by1,
+                        "x2": bx2,
+                        "y2": by2,
+                        "confidence": float(scores[idx]),
+                        "w": bx2 - bx1,
+                        "h": by2 - by1,
+                        "cx": (bx1 + bx2) // 2,
+                        "cy": (by1 + by2) // 2,
+                    }
+                )
 
         return detections
 
@@ -249,7 +253,9 @@ def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0
     return detections
 
 
-def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2):
+def detect_from_video(
+    video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2
+):
     """
     Xử lý video kết hợp kỹ thuật Frame Striding (mặc định nhảy bước 2 frame)
     giúp tăng gấp đôi tốc độ render video mà mắt thường không nhận ra độ trễ.
