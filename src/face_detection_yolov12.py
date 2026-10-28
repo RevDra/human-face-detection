@@ -1,386 +1,258 @@
-"""
-Human Face Detection using YOLOv12 with Live Camera Display
-Shows real-time face detection with confidence scores
-Optimized for high FPS performance using YOLOv12 Attention Mechanism & ONNX Runtime
-"""
-
-import os
-
-# Tối ưu hóa luồng CPU cho ONNX Runtime (tránh nghẽn cổ chai trên môi trường cloud/CPU)
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
-os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
-
-import torch
-
-try:
-    from ultralytics.nn.tasks import DetectionModel
-
-    torch.serialization.add_safe_globals([DetectionModel])
-    torch.serialization.safe_globals = lambda: None
-except Exception:
-    pass
-
-import time
-import tkinter as tk
-from pathlib import Path
-from tkinter import Label
-from typing import Any, Dict
-
 import cv2
-from PIL import Image, ImageTk
+import numpy as np
+import onnxruntime as ort
+from pathlib import Path
 
 
 class YOLOv12FaceDetector:
-    """Face detection using YOLOv12 (Class name kept for compatibility)"""
+    """
+    Bộ nhận diện khuôn mặt YOLOv12 chạy thuần ONNX Runtime (Zero-PyTorch).
+    Áp dụng Singleton Pattern để cache phiên làm việc (InferenceSession) trong RAM.
+    """
 
-    _instances: dict[str, Any] = {}
+    _instances = {}
 
-    def __new__(cls, model_path):
-        resolved_path = str(cls._resolve_model_path(model_path))
+    def __new__(cls, model_path="yolov12n-face.onnx"):
+        resolved_path = str(Path(model_path).resolve())
         if resolved_path not in cls._instances:
-            instance = super().__new__(cls)
+            instance = super(YOLOv12FaceDetector, cls).__new__(cls)
             instance._initialized = False
             cls._instances[resolved_path] = instance
         return cls._instances[resolved_path]
 
-    @staticmethod
-    def _resolve_model_path(model_path):
-        """Tự động ưu tiên file .onnx nếu truyền vào đường dẫn .pt cũ"""
-        p = Path(model_path)
-        if p.suffix == ".pt":
-            onnx_p = p.with_suffix(".onnx")
-            if onnx_p.exists():
-                return onnx_p
-        return p
-
-    def __init__(self, model_path):
+    def __init__(self, model_path="yolov12n-face.onnx"):
         if getattr(self, "_initialized", False):
             return
 
-        try:
-            from ultralytics import YOLO
-
-            actual_path = self._resolve_model_path(model_path)
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.model_path = str(actual_path)
-            self.is_onnx = actual_path.suffix.lower() == ".onnx"
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-            if self.is_onnx:
-                # Lưu ý: Model ONNX trong Ultralytics KHÔNG gọi .to(device) khi khởi tạo
-                # mà truyền device trực tiếp lúc suy luận (inference)
-                self.yolo = YOLO(self.model_path, task="detect")
-            else:
-                self.yolo = YOLO(self.model_path).to(self.device)
-
-            self._initialized = True
-            print(f"Loaded YOLOv12 model from {self.model_path} on {self.device}")
-        except ImportError:
-            raise ImportError(
-                "ultralytics or onnxruntime package not found. pip install ultralytics onnxruntime"
+        model_file = Path(model_path)
+        if not model_file.exists():
+            raise FileNotFoundError(
+                f"Không tìm thấy tệp mô hình: {model_file}\n"
+                f"Hãy đặt tệp mô hình vào thư mục 'models/'."
             )
-        except Exception as e:
-            raise Exception(f"Failed to load model: {e}")
 
-    def _extract_detections(self, results, scale=1.0):
-        """Hàm nội bộ trích xuất bounding boxes tối ưu tốc độ"""
+        self.model_path = model_file
+
+        # Tối ưu hóa đồ thị tính toán ONNX ở mức tối đa
+        sess_options = ort.SessionOptions()
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.intra_op_num_threads = 2  # Tùy chỉnh theo số nhân CPU vật lý
+        sess_options.inter_op_num_threads = 1
+        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+
+        # Tự động ưu tiên OpenVINO hoặc CUDA nếu môi trường có hỗ trợ, fallback về CPU
+        available_providers = ort.get_available_providers()
+        preferred_providers = [
+            p for p in [
+                "OpenVINOExecutionProvider",
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
+            if p in available_providers
+        ]
+
+        self.session = ort.InferenceSession(
+            str(model_file),
+            sess_options=sess_options,
+            providers=preferred_providers or ["CPUExecutionProvider"],
+        )
+
+        # Lấy thông tin đầu vào của mô hình (mặc định chuẩn YOLO là 1x3x640x640)
+        model_inputs = self.session.get_inputs()[0]
+        self.input_name = model_inputs.name
+        input_shape = model_inputs.shape
+        self.input_height = input_shape[2] if isinstance(input_shape[2], int) else 640
+        self.input_width = input_shape[3] if isinstance(input_shape[3], int) else 640
+
+        self._initialized = True
+
+    def _preprocess(self, image: np.ndarray):
+        """
+        Tiền xử lý ảnh chuẩn Letterbox của YOLO bằng thuần OpenCV C++:
+        - Giữ nguyên tỷ lệ khung hình (aspect ratio), bù viền xám (114, 114, 114).
+        - Chuyển BGR -> RGB, HWC -> NCHW và chuẩn hóa về [0.0, 1.0] qua blobFromImage.
+        """
+        img_h, img_w = image.shape[:2]
+        scale = min(self.input_width / img_w, self.input_height / img_h)
+        new_w, new_h = int(round(img_w * scale)), int(round(img_h * scale))
+
+        pad_w = (self.input_width - new_w) / 2.0
+        pad_h = (self.input_height - new_h) / 2.0
+
+        if (img_w, img_h) != (new_w, new_h):
+            resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            resized = image
+
+        top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
+        left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
+
+        padded = cv2.copyMakeBorder(
+            resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+        )
+
+        # Tạo blob (1, 3, H, W) kiểu float32 cực nhanh bằng hàm C++ của OpenCV
+        blob = cv2.dnn.blobFromImage(
+            padded, 1.0 / 255.0, (self.input_width, self.input_height), swapRB=True, crop=False
+        )
+        return blob, scale, left, top
+
+    def detect_faces(self, image, conf_threshold=0.32, iou_threshold=0.45):
+        """
+        Suy luận trực tiếp trên ONNX Runtime và lọc kết quả bằng Vectorization + NMS.
+        """
+        if image is None or image.size == 0:
+            return []
+
+        img_h, img_w = image.shape[:2]
+        blob, scale, pad_left, pad_top = self._preprocess(image)
+
+        # Chạy suy luận trực tiếp trên C++ Engine của ONNX Runtime
+        raw_output = self.session.run(None, {self.input_name: blob})[0]
+
+        # Output của YOLOv12 cho 1 class có dạng (1, 5, 8400) hoặc (1, 8400, 5)
+        predictions = np.squeeze(raw_output)
+        if predictions.ndim == 2 and predictions.shape[0] < predictions.shape[1]:
+            predictions = predictions.T  # Đưa về dạng chuẩn (8400, 5): [cx, cy, w, h, conf]
+
+        # Nếu mô hình có nhiều hơn 1 class, lấy max score từ cột thứ 4 trở đi
+        if predictions.shape[1] > 5:
+            scores = np.max(predictions[:, 4:], axis=1)
+        else:
+            scores = predictions[:, 4]
+
+        # Bước 1: Lọc nhanh bằng mảng Boolean của NumPy (loại bỏ >99% các box rác)
+        valid_mask = scores >= conf_threshold
+        predictions = predictions[valid_mask]
+        scores = scores[valid_mask]
+
+        if len(predictions) == 0:
+            return []
+
+        # Bước 2: Khôi phục tọa độ từ không gian 640x640 về kích thước ảnh gốc
+        cx = (predictions[:, 0] - pad_left) / scale
+        cy = (predictions[:, 1] - pad_top) / scale
+        w = predictions[:, 2] / scale
+        h = predictions[:, 3] / scale
+
+        x1 = cx - w / 2.0
+        y1 = cy - h / 2.0
+
+        # Đóng gói danh sách [x, y, w, h] cho thuật toán NMS của OpenCV
+        nms_boxes = np.column_stack((x1, y1, w, h)).tolist()
+        indices = cv2.dnn.NMSBoxes(nms_boxes, scores.tolist(), conf_threshold, iou_threshold)
+
         detections = []
-        inv_scale = 1.0 / scale if scale < 1.0 else 1.0
+        if len(indices) > 0:
+            for idx in np.array(indices).flatten():
+                bx1 = int(max(0, min(img_w, round(x1[idx]))))
+                by1 = int(max(0, min(img_h, round(y1[idx]))))
+                bw = int(round(w[idx]))
+                bh = int(round(h[idx]))
+                bx2 = int(max(0, min(img_w, bx1 + bw)))
+                by2 = int(max(0, min(img_h, by1 + bh)))
 
-        for result in results:
-            if result.boxes is None or len(result.boxes) == 0:
-                continue
+                detections.append({
+                    "x1": bx1,
+                    "y1": by1,
+                    "x2": bx2,
+                    "y2": by2,
+                    "confidence": float(scores[idx]),
+                    "w": bx2 - bx1,
+                    "h": by2 - by1,
+                    "cx": (bx1 + bx2) // 2,
+                    "cy": (by1 + by2) // 2,
+                })
 
-            # Chuyển toàn bộ tensor sang numpy mảng 1 lần thay vì gọi trong từng vòng lặp
-            xyxys = result.boxes.xyxy.cpu().numpy()
-            confs = result.boxes.conf.cpu().numpy()
-
-            for box_coords, conf_val in zip(xyxys, confs):
-                x1, y1, x2, y2 = box_coords
-                if scale < 1.0:
-                    x1, y1, x2, y2 = (
-                        int(x1 * inv_scale),
-                        int(y1 * inv_scale),
-                        int(x2 * inv_scale),
-                        int(y2 * inv_scale),
-                    )
-                else:
-                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-
-                detections.append(
-                    {
-                        "x1": x1,
-                        "y1": y1,
-                        "x2": x2,
-                        "y2": y2,
-                        "confidence": float(conf_val),
-                        "w": x2 - x1,
-                        "h": y2 - y1,
-                        "cx": (x1 + x2) // 2,
-                        "cy": (y1 + y2) // 2,
-                    }
-                )
         return detections
 
-    def detect_faces(self, image, conf_threshold=0.32):
-        """Standard detection"""
-        try:
-            results = self.yolo(image, conf=conf_threshold, device=self.device, verbose=False)
-            return self._extract_detections(results, scale=1.0)
-        except Exception as e:
-            print(f"Detection error: {e}")
-            return []
+    def detect_faces_optimized(self, image, conf_threshold=0.32, iou_threshold=0.45, max_width=640):
+        """
+        Giữ lại phương thức này để tương thích hoàn toàn với app.py.
+        Vì _preprocess() đã tự động resize Letterbox về 640x640 bằng C++,
+        ta có thể gọi thẳng detect_faces() mà không cần resize 2 lần.
+        """
+        return self.detect_faces(image, conf_threshold, iou_threshold)
 
-    def detect_faces_optimized(self, image, conf_threshold=0.32, max_width=640):
-        """Optimized detection with resize"""
-        try:
-            height, width = image.shape[:2]
-            if width > max_width:
-                scale = max_width / width
-                new_height = int(height * scale)
-                inference_image = cv2.resize(image, (max_width, new_height))
-            else:
-                scale = 1.0
-                inference_image = image
-
-            results = self.yolo(
-                inference_image, conf=conf_threshold, device=self.device, verbose=False
-            )
-            return self._extract_detections(results, scale=scale)
-        except Exception as e:
-            print(f"Detection error: {e}")
-            return []
-
-    def draw_faces(self, image, detections, color=(0, 255, 0), thickness=2, show_confidence=True):
+    def draw_faces(self, image, detections, show_conf=True, blur_faces=False):
         result = image.copy()
-        for det in detections:
-            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
-            conf = det["confidence"]
-            cv2.rectangle(result, (x1, y1), (x2, y2), color, thickness)
 
-            if show_confidence:
-                conf_text = f"{conf:.1%}"
-                text_size = cv2.getTextSize(conf_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+        for det in detections:
+            x1, y1 = det["x1"], det["y1"]
+            x2, y2 = det["x2"], det["y2"]
+            conf = det["confidence"]
+
+            if blur_faces:
+                face_roi = result[y1:y2, x1:x2]
+                if face_roi.size > 0:
+                    blur_w = max(15, (x2 - x1) // 3 | 1)
+                    blur_h = max(15, (y2 - y1) // 3 | 1)
+                    result[y1:y2, x1:x2] = cv2.GaussianBlur(face_roi, (blur_w, blur_h), 30)
+
+            color = (0, 255, 0) if conf > 0.7 else (0, 165, 255)
+            cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
+
+            if show_conf:
+                label = f"Face {conf:.2f}"
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
                 cv2.rectangle(
                     result,
-                    (x1, y1 - text_size[0][1] - 10),
-                    (x1 + text_size[0][0] + 5, y1),
+                    (x1, y1 - label_size[1] - 10),
+                    (x1 + label_size[0], y1),
                     color,
                     -1,
                 )
                 cv2.putText(
                     result,
-                    conf_text,
-                    (x1 + 2, y1 - 5),
+                    label,
+                    (x1, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
+                    0.6,
                     (255, 255, 255),
                     2,
                 )
+
+        info = f"Faces: {len(detections)} (YOLOv12 ONNX)"
+        cv2.putText(result, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
         return result
 
-    def blur_faces(self, image, detections, blur_factor=30):
-        """Apply Gaussian blur to detected faces for privacy"""
-        result = image.copy()
-        h, w = image.shape[:2]
-
-        for det in detections:
-            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
-
-            # Ensure coordinates are within image boundaries
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
-
-            if x2 > x1 and y2 > y1:
-                face_roi = image[y1:y2, x1:x2]
-
-                # Ensure kernel size is odd and based on face size
-                kw = (x2 - x1) // 2
-                kh = (y2 - y1) // 2
-
-                # Minimum kernel size for noticeable blur
-                kw = max(25, kw if kw % 2 != 0 else kw + 1)
-                kh = max(25, kh if kh % 2 != 0 else kh + 1)
-
-                blurred_face = cv2.GaussianBlur(face_roi, (kw, kh), blur_factor)
-                result[y1:y2, x1:x2] = blurred_face
-
-        return result
-
-    def get_face_crops(self, image, detections, padding=0.1):
-        """Extract cropped face images from detection results"""
+    def get_face_crops(self, image, detections, padding=10):
         crops = []
         h, w = image.shape[:2]
 
         for det in detections:
-            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
-            fw, fh = x2 - x1, y2 - y1
+            x1 = max(0, det["x1"] - padding)
+            y1 = max(0, det["y1"] - padding)
+            x2 = min(w, det["x2"] + padding)
+            y2 = min(h, det["y2"] + padding)
 
-            # Add padding
-            px = int(fw * padding)
-            py = int(fh * padding)
-
-            cx1, cy1 = max(0, x1 - px), max(0, y1 - py)
-            cx2, cy2 = min(w, x2 + px), min(h, y2 + py)
-
-            if cx2 > cx1 and cy2 > cy1:
-                crop = image[cy1:cy2, cx1:cx2]
+            crop = image[y1:y2, x1:x2]
+            if crop.size > 0:
                 crops.append(crop)
 
         return crops
 
 
-# --- GUI Class (Webcam) ---
-class WebcamFaceDetectionGUI:
-    def __init__(self, model_path, conf_threshold=0.32, skip_frames=2, inference_width=640):
-        self.model_path = model_path
-        self.conf_threshold = conf_threshold
-        self.skip_frames = skip_frames
-        self.inference_width = inference_width
-        self.detector = None
-        self.cap = None
-        self.running = False
-        self.frame_count = 0
-        self.detection_count = 0
-        self.fps = 0
-        self.detection_fps = 0
-        self.last_time = time.time()
-        self.last_detection_time = time.time()
-        self.current_detections = None
+def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0.32):
+    image = cv2.imread(str(image_path))
+    if image is None:
+        return []
 
-        try:
-            self.detector = YOLOv12FaceDetector(model_path)
-        except Exception as e:
-            print(f"Error: {e}")
-            return
+    detector = YOLOv12FaceDetector(model_path)
+    detections = detector.detect_faces(image, conf_threshold)
+    result = detector.draw_faces(image, detections)
 
-        self.root = tk.Tk()
-        self.root.title(f"YOLOv12 Face Detection - {Path(self.detector.model_path).stem}")
-        self.root.geometry("1024x768")
+    if output_path:
+        cv2.imwrite(str(output_path), result)
 
-        # UI Setup
-        info_frame = tk.Frame(self.root, bg="lightgray")
-        info_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
-        self.info_label = Label(
-            info_frame,
-            text="Initializing...",
-            bg="lightgray",
-            fg="black",
-            font=("Arial", 10),
-        )
-        self.info_label.pack()
-
-        self.video_frame = tk.Frame(self.root)
-        self.video_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.video_label = Label(self.video_frame)
-        self.video_label.pack(fill=tk.BOTH, expand=True)
-
-        control_frame = tk.Frame(self.root, bg="lightgray")
-        control_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
-        engine_label = "ONNX" if self.detector.is_onnx else "PyTorch"
-        self.status_label = Label(
-            control_frame,
-            text=f"Running YOLOv12 ({engine_label})",
-            bg="lightgray",
-            fg="green",
-            font=("Arial", 10, "bold"),
-        )
-        self.status_label.pack(side=tk.LEFT, padx=5)
-        self.quit_button = tk.Button(
-            control_frame, text="Quit", command=self.on_quit, bg="red", fg="white"
-        )
-        self.quit_button.pack(side=tk.RIGHT, padx=5)
-
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            self.info_label.config(text="Error: Could not open webcam", fg="red")
-            return
-
-        self.running = True
-        self.root.protocol("WM_DELETE_WINDOW", self.on_quit)
-        self.update_frame()
-
-    def update_frame(self):
-        if not self.running:
-            return
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        should_detect = (self.frame_count % self.skip_frames) == 0
-        if should_detect:
-            detections = self.detector.detect_faces_optimized(
-                frame, self.conf_threshold, self.inference_width
-            )
-            self.current_detections = detections
-            self.detection_count += 1
-            if time.time() - self.last_detection_time >= 1.0:
-                self.detection_fps = self.detection_count / (time.time() - self.last_detection_time)
-                self.detection_count = 0
-                self.last_detection_time = time.time()
-        else:
-            detections = self.current_detections if self.current_detections else []
-
-        result = frame.copy()
-        for det in detections:
-            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
-            conf = det["confidence"]
-            cv2.rectangle(result, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(
-                result,
-                f"{conf:.1%}",
-                (x1, y1 - 5),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                1,
-            )
-
-        self.frame_count += 1
-        if time.time() - self.last_time >= 1.0:
-            self.fps = self.frame_count / (time.time() - self.last_time)
-            self.frame_count = 0
-            self.last_time = time.time()
-
-        info_text = (
-            f"FPS: {self.fps:.1f} | Det FPS: {self.detection_fps:.1f} | Faces: {len(detections)}"
-        )
-        cv2.putText(result, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-        h, w = result.shape[:2]
-        display_w = 1000
-        if w > display_w:
-            display_h = int(h * display_w / w)
-            result = cv2.resize(result, (display_w, display_h))
-
-        rgb_frame = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
-        tk_image = ImageTk.PhotoImage(image=Image.fromarray(rgb_frame))
-        self.video_label.imgtk = tk_image
-        self.video_label.config(image=tk_image)
-
-        self.root.after(1, self.update_frame)
-
-    def on_quit(self):
-        self.running = False
-        if self.cap:
-            self.cap.release()
-        self.root.quit()
-        self.root.destroy()
-
-    def run(self):
-        self.root.mainloop()
+    return detections
 
 
-# --- Helper Functions ---
-def webcam_detection_with_display(
-    model_path, conf_threshold=0.32, skip_frames=2, inference_width=640
-):
-    gui = WebcamFaceDetectionGUI(model_path, conf_threshold, skip_frames, inference_width)
-    gui.run()
-
-
-def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0.32):
+def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2):
+    """
+    Xử lý video kết hợp kỹ thuật Frame Striding (mặc định nhảy bước 2 frame)
+    giúp tăng gấp đôi tốc độ render video mà mắt thường không nhận ra độ trễ.
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return
@@ -396,147 +268,23 @@ def detect_from_video(video_path, model_path, output_path=None, conf_threshold=0
         else None
     )
 
+    frame_idx = 0
+    cached_detections = []
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        detections = detector.detect_faces(frame, conf_threshold)
-        result = detector.draw_faces(frame, detections)
+
+        if frame_idx % frame_stride == 0:
+            cached_detections = detector.detect_faces(frame, conf_threshold)
+
+        result = detector.draw_faces(frame, cached_detections)
         if writer:
             writer.write(result)
+
+        frame_idx += 1
 
     cap.release()
     if writer:
         writer.release()
-    print("Video processing complete")
-
-
-def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0.32):
-    image = cv2.imread(str(image_path))
-    if image is None:
-        return None, []
-
-    detector = YOLOv12FaceDetector(model_path)
-    detections = detector.detect_faces(image, conf_threshold)
-    result = detector.draw_faces(image, detections)
-
-    print(f"✓ Found {len(detections)} faces")
-    if output_path:
-        cv2.imwrite(str(output_path), result)
-        print(f"Output saved to {output_path}")
-    return result, detections
-
-
-def display_image_with_detections(image, title="Result"):
-    root = tk.Tk()
-    root.title(title)
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    h, w = rgb.shape[:2]
-    if w > 1200:
-        scale = 1200 / w
-        rgb = cv2.resize(rgb, (1200, int(h * scale)))
-    photo = ImageTk.PhotoImage(Image.fromarray(rgb))
-    label = Label(root, image=photo)
-    label.image = photo
-    label.pack()
-    root.mainloop()
-
-
-# --- Main Menu Logic ---
-def select_model_level(script_dir):
-    print("\n" + "-" * 40)
-    print("  SELECT MODEL SIZE (YOLOv12 ONNX):")
-    print("  1. Nano   (yolov12n) - Super light")
-    print("  2. Small  (yolov12s) - Basic")
-    print("  3. Medium (yolov12m) - Sweet spot")
-    print("  4. Large  (yolov12l) - State of the Art")
-    print("-" * 40)
-
-    mapping = {
-        "1": "yolov12n-face.onnx",
-        "2": "yolov12s-face.onnx",
-        "3": "yolov12m-face.onnx",
-        "4": "yolov12l-face.onnx",
-    }
-
-    while True:
-        choice = input("  >> Select model (1-4) [Default=2]: ").strip()
-        if choice == "":
-            choice = "2"
-
-        if choice in mapping:
-            model_name = mapping[choice]
-            model_path = script_dir / model_name
-            # Fallback kiểm tra ở thư mục models/ nếu để chung trong cấu trúc repo
-            alt_model_path = script_dir.parent / "models" / model_name
-
-            if model_path.exists():
-                return str(model_path)
-            elif alt_model_path.exists():
-                return str(alt_model_path)
-            else:
-                print(f"  [!] Error: File {model_name} not found in {script_dir}")
-        else:
-            print("  [!] Invalid choice.")
-
-
-def choose_and_process_file(script_dir):
-    while True:
-        print("\n" + "█" * 70)
-        print("█" + "  YOLOv12 Face Detection System - ADVANCED MODE  ".center(68) + "█")
-        print("█" * 70)
-        print("  1) WEBCAM        (Live Detection)")
-        print("  2) VIDEO FILE    (Process Video)")
-        print("  3) IMAGE FILE    (Process Image)")
-        print("  0) EXIT")
-        print("=" * 70)
-
-        task_choice = input("  >> Choose task (0-3): ").strip()
-
-        if task_choice == "0":
-            break
-
-        if task_choice in ["1", "2", "3"]:
-            model_path = select_model_level(script_dir)
-
-            if task_choice == "1":
-                is_heavy = "l-face" in model_path or "m-face" in model_path
-                skip = 3 if is_heavy else 1
-                webcam_detection_with_display(model_path, conf_threshold=0.35, skip_frames=skip)
-            elif task_choice == "2":
-                video_path = input("\n  >> Path to video file: ").strip().strip("\"'")
-                detect_from_video(video_path, model_path, "output_video.mp4", 0.35)
-            elif task_choice == "3":
-                image_path = input("\n  >> Path to image file: ").strip().strip("\"'")
-                result, _ = detect_from_image(image_path, model_path, "output_image.jpg", 0.35)
-                if result is not None:
-                    display_image_with_detections(result)
-        else:
-            print("Invalid option!")
-
-
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    required_models = [
-        "yolov12n-face.onnx",
-        "yolov12s-face.onnx",
-        "yolov12m-face.onnx",
-        "yolov12l-face.onnx",
-    ]
-
-    print("Checking ONNX models...")
-    found_any = False
-    for m in required_models:
-        if (script_dir / m).exists() or (script_dir.parent / "models" / m).exists():
-            print(f"  [OK] Found {m}")
-            found_any = True
-        else:
-            print(f"  [MISSING] {m}")
-
-    if not found_any:
-        print("\nERROR: No YOLOv12 ONNX models found! Please place .onnx files in this folder.")
-    else:
-        try:
-            choose_and_process_file(script_dir)
-        except Exception as e:
-            print(f"\nCritical Error: {e}")
