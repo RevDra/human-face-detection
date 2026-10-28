@@ -37,7 +37,6 @@ class YOLOv12FaceDetector:
         except ValueError:
             raise ValueError("Đường dẫn mô hình không hợp lệ: phải nằm trong thư mục 'models/'.")
 
-        model_file = Path(model_path)
         if not model_file.exists():
             raise FileNotFoundError(
                 f"Không tìm thấy tệp mô hình: {model_file}\n"
