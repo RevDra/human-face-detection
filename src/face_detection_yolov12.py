@@ -50,13 +50,14 @@ class YOLOv12FaceDetector:
                 f"Please put the model's file at folder 'models/'."
             )
 
-        self.model_path = model_file
-
         sess_options = ort.SessionOptions()
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        sess_options.intra_op_num_threads = 2  # Base on CPU cores
-        sess_options.inter_op_num_threads = 1
         sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.intra_op_num_threads = 2
+        sess_options.inter_op_num_threads = 1
+        sess_options.enable_cpu_mem_arena = True
+        sess_options.enable_mem_pattern = True
+        sess_options.add_session_config_entry("session.intra_op.allow_spinning", "1")
 
         available_providers = ort.get_available_providers()
         preferred_providers = [
@@ -81,37 +82,35 @@ class YOLOv12FaceDetector:
         self.input_height = input_shape[2] if isinstance(input_shape[2], int) else 640
         self.input_width = input_shape[3] if isinstance(input_shape[3], int) else 640
 
+        self.input_size = self.input_height
+        self._letterbox_buffer = np.full((self.input_height, self.input_width, 3), 114, dtype=np.uint8)
+        self._blob_buffer = np.empty((1, 3, self.input_height, self.input_width), dtype=np.float32)
+
+        dummy_input = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
+        self.session.run(None, {self.input_name: dummy_input})
+        
         self._initialized = True
 
-    def _preprocess(self, image: np.ndarray):
-        """
-        Preprocess Letterbox data using OpenCV C++:
-        - Respect aspect ratio, fill grey edges (114, 114, 114)
-        - Transform BGR to RGB, HWC to NCHW, and normalize to [0, 1] by blobFromImage.
-        """
+    def _preprocess(self, image):
+        """Preprocess Letterbox utilizing given cache (Zero-Copy / In-place)"""
         img_h, img_w = image.shape[:2]
-        scale = min(self.input_width / img_w, self.input_height / img_h)
+        scale = min(self.input_size / img_w, self.input_size / img_h)
         new_w, new_h = int(round(img_w * scale)), int(round(img_h * scale))
 
-        pad_w = (self.input_width - new_w) / 2.0
-        pad_h = (self.input_height - new_h) / 2.0
-
-        if (img_w, img_h) != (new_w, new_h):
-            resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        else:
-            resized = image
-
+        pad_w = (self.input_size - new_w) / 2.0
+        pad_h = (self.input_size - new_h) / 2.0
         top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
         left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
 
-        padded = cv2.copyMakeBorder(
-            resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
-        )
+        self._letterbox_buffer.fill(114)
 
-        blob = cv2.dnn.blobFromImage(
-            padded, 1.0 / 255.0, (self.input_width, self.input_height), swapRB=True, crop=False
-        )
-        return blob, scale, left, top
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        self._letterbox_buffer[top : top + new_h, left : left + new_w] = resized
+
+        rgb = self._letterbox_buffer[:, :, ::-1].transpose(2, 0, 1)
+        np.multiply(rgb, 1.0 / 255.0, out=self._blob_buffer[0], casting="unsafe")
+
+        return self._blob_buffer, scale, left, top
 
     def detect_faces(self, image, conf_threshold=0.32, iou_threshold=0.45):
         """
