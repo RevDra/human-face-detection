@@ -16,7 +16,7 @@ import base64
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 import cv2
 import numpy as np
@@ -27,6 +27,38 @@ from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+
+try:
+    from turbojpeg import TurboJPEG
+
+    jpeg_engine = TurboJPEG()
+except Exception:
+    jpeg_engine = None
+
+
+def decode_image_fast(image_bytes: bytes) -> np.ndarray:
+    """Decode images using TurboJPEG if have, else OpenCV"""
+    if jpeg_engine is not None:
+        try:
+            return jpeg_engine.decode(image_bytes)
+        except Exception:
+            pass
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+
+def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
+    """Zip to TurboJPEG"""
+    if jpeg_engine is not None:
+        try:
+            res = jpeg_engine.encode(image_bgr, quality=quality)
+            if res is not None:
+                return cast(bytes, res)
+        except Exception:
+            pass
+    _, buffer = cv2.imencode(".jpg", image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    return bytes(buffer)
+
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
@@ -142,7 +174,7 @@ def index():
 
 @app.route("/api/detect-image", methods=["POST"])
 def detect_image():
-    """Detect faces in uploaded image"""
+    """Detect faces in uploaded image or live webcam frame"""
     try:
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
@@ -154,24 +186,59 @@ def detect_image():
         if not allowed_file(file.filename) or not is_image(file.filename):
             return jsonify({"error": "Only image files allowed"}), 400
 
+        # Get parameters
         model = request.form.get("model", "yolov12s-face-int8.onnx")
         blur = request.form.get("blur") == "true"
+
+        # Nhận diện xem request có phải đến từ luồng Webcam hay không
+        is_webcam = request.form.get("mode") == "webcam" or "webcam" in file.filename.lower()
 
         if not model.endswith(".onnx"):
             model = model.replace(".pt", ".onnx")
 
         if model not in ALLOWED_MODELS:
-            app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Small).")
-            model = "yolov12s-face-int8.onnx"
+            app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
+            model = "yolov12n-face-int8.onnx" if is_webcam else "yolov12s-face-int8.onnx"
 
+        # Lấy instance detector (đã được cache ở RAM qua Singleton)
         detector = get_detector(model)
 
+        # Giải mã ảnh trực tiếp từ bytes tốc độ cao
         image_data = file.read()
-        nparr = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        image = decode_image_fast(image_data)
+        if image is None:
+            return jsonify({"error": "Invalid image data"}), 400
 
+        img_h, img_w = image.shape[:2]
         detections = detector.detect_faces(image, conf_threshold=0.32)
 
+        # --- NHÁNH 1: WEBCAM (CHỈ TRẢ VỀ TỌA ĐỘ - ZERO SERVER-SIDE RENDERING) ---
+        if is_webcam:
+            return jsonify(
+                {
+                    "success": True,
+                    "mode": "coordinates_only",
+                    "frame_width": img_w,
+                    "frame_height": img_h,
+                    "detections": {
+                        "count": len(detections),
+                        "boxes": [
+                            {
+                                "x1": det["x1"],
+                                "y1": det["y1"],
+                                "x2": det["x2"],
+                                "y2": det["y2"],
+                                "w": det["w"],
+                                "h": det["h"],
+                                "conf": round(det["confidence"], 3),
+                            }
+                            for det in detections
+                        ],
+                    },
+                }
+            )
+
+        # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         if blur:
             result_image = detector.blur_faces(image, detections)
         else:
@@ -180,16 +247,19 @@ def detect_image():
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
 
+        # Extract crops for gallery
         crops_base64 = []
         if len(detections) > 0:
             crops = detector.get_face_crops(image, detections)
             for crop in crops:
-                _, buffer = cv2.imencode(".jpg", crop)
-                crops_base64.append(base64.b64encode(buffer).decode())
+                crop_bytes = encode_jpeg_fast(crop, quality=80)
+                crops_base64.append(base64.b64encode(crop_bytes).decode())
 
-        _, buffer = cv2.imencode(".jpg", result_image)
-        img_base64 = base64.b64encode(buffer).decode()
+        # Convert result to base64 for display
+        result_bytes = encode_jpeg_fast(result_image, quality=85)
+        img_base64 = base64.b64encode(result_bytes).decode()
 
+        # Prepare response
         response = {
             "success": True,
             "image": f"data:image/jpeg;base64,{img_base64}",

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="aJ5xFmUacyJe-FOhiU28zGS9lJ3vr38zz4YPOX843V8" />
     <title>YOLOv12 Face Detection - Web</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -57,13 +58,16 @@
             align-items: center; 
             justify-content: center;
         }
-        #webcamVideo, #webcamResult {
+        #webcamVideo, #webcamOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: auto;
+            height: 100%;
             display: block;  
-            object-fit: fill; 
+            object-fit: cover; 
         }
-        #webcam { width: 100%; height: auto; display: block; }
+        #webcamOverlay { z-index: 10; pointer-events: none; }
         .webcam-controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
         .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; animation: blink 1s infinite; }
         .status-indicator.active { background: #4caf50; }
@@ -132,7 +136,7 @@
             display: inline-block !important; 
             width: auto !important; 
             margin: 0 !important; 
-            font-size: 45px; /* Size to hơn */
+            font-size: 45px;
             color: #e0e0e0; 
             cursor: pointer; 
             transition: 0.2s;
@@ -191,6 +195,7 @@
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
+
   gtag('config', 'G-P8LFE192QP');
 </script>
 <body>
@@ -374,6 +379,7 @@
             </div>
         </div>
 
+        <!-- TAB LIVE WEBCAM ĐÃ TỐI ƯU CỰC HẠN (CANVAS 60 FPS + LERP) -->
         <div id="webcam-tab" class="tab-content">
             <div class="card">
                 <h2>Live Webcam Detection</h2>
@@ -399,24 +405,15 @@
                 <div style="display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
                     
                     <div style="flex: 1; min-width: 320px;">
-                        <h3 style="color: #667eea; margin-bottom: 10px;">📹 Webcam Feed</h3>
+                        <h3 style="color: #667eea; margin-bottom: 10px;">📹 Webcam Feed & Real-Time Tracking</h3>
                         <div class="video-container">
                             <video id="webcamVideo" playsinline autoplay muted></video>
-                        </div>
-                    </div>
-
-                    <div style="flex: 1; min-width: 320px;">
-                        <h3 style="color: #667eea; margin-bottom: 10px;">🎯 Detection Results</h3>
-                        <div class="video-container">
-                            <img id="webcamResult" style="display: none;">
-                            <p id="webcamPlaceholder" style="color: #666; font-size: 1.1em;">
-                                Click ▶️ <strong>Start Detection</strong>
-                            </p>
+                            <canvas id="webcamOverlay"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <div class="detection-stats">
+                <div class="detection-stats" style="margin-top: 20px;">
                     <div class="stat-row">
                         <span class="stat-label">
                             <span class="status-indicator inactive" id="statusIndicator"></span>
@@ -429,7 +426,7 @@
                         <span class="stat-value" id="webcamFaces">0</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">FPS</span>
+                        <span class="stat-label">FPS (Client Smooth)</span>
                         <span class="stat-value" id="webcamFPS">0</span>
                     </div>
                     <div class="stat-row">
@@ -486,7 +483,7 @@
 
         <div class="footer text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
             <p class="mb-1 text-white-50">
-                🚀 YOLOv12 Face Detection Web - Version 1.5.0 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
+                🚀 YOLOv12 Face Detection Web - Version 1.6.0 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
             </p>
             <p class="mb-0 small text-muted">
                 2026 &copy; Developed by <a href="mailto:luongminhngoc0@gmail.com">Ngoc M. Luong</a> with ❤️
@@ -513,9 +510,22 @@
         let detectionInterval = null;
         let frameCount = 0;
         let startTime = null;
-        let isProcessing = false; // Prevent overlapping requests
+        let isProcessing = false; 
         let lastFilename = "";
         let lastModel = "";
+
+        // Biến phục vụ Canvas & Lerp (Smoothing) cho Webcam
+        const videoEl = document.getElementById('webcamVideo');
+        const overlayCanvas = document.getElementById('webcamOverlay');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const captureCanvas = document.createElement('canvas');
+        const captureCtx = captureCanvas.getContext('2d');
+        const SEND_WIDTH = 480;
+
+        let targetBoxes = [];
+        let currentBoxes = [];
+        let animationFrameId = null;
+
         // LOAD MODELS 
         document.addEventListener('DOMContentLoaded', loadModels);
         async function loadModels() {
@@ -523,7 +533,6 @@
                 const response = await fetch('/api/models');
                 const models = await response.json();
                 
-                // Selector
                 const selectors = ['imageModel', 'videoModel', 'webcamModel'];
                 
                 selectors.forEach(id => {
@@ -534,10 +543,9 @@
                     
                     for (const [key, info] of Object.entries(models)) {
                         const option = document.createElement('option');
-                        option.value = info.name; // file .pt
+                        option.value = info.name; 
                         option.text = info.label || `${key.toUpperCase()} - ${info.description}`;
                         
-                        // Default logic
                         if (id === 'imageModel' && key === 'large') option.selected = true;
                         if (id === 'videoModel' && key === 'small') option.selected = true;
                         if (id === 'webcamModel' && key === 'nano') option.selected = true;
@@ -547,27 +555,24 @@
                 });
             } catch (e) {
                 console.error("Failed to load models:", e);
-                // Fallback if errors in API
                 ['imageModel', 'videoModel', 'webcamModel'].forEach(id => {
                     const select = document.getElementById(id);
-                    select.innerHTML = '<option value="yolov12n-face.pt">YOLOv12 Nano (Fallback)</option>';
+                    select.innerHTML = '<option value="yolov12n-face-int8.onnx">YOLOv12 Nano (Fallback)</option>';
                 });
             }
         }
-        // Tab switching
+
         function switchTab(tabName) {
-            // Hide all tabs
             const tabs = document.querySelectorAll('.tab-content');
             tabs.forEach(tab => tab.classList.remove('active'));
             
             const buttons = document.querySelectorAll('.tab-button');
             buttons.forEach(btn => btn.classList.remove('active'));
             
-            // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
         }
-        // Update file info display
+
         function updateFileInfo(type, file) {
             if (!file) return;
             
@@ -576,7 +581,6 @@
             const filePreviewElement = document.getElementById(`${type}Preview`);
             const fileInfoDiv = document.getElementById(`${type}FileInfo`);
             
-            // Show file info
             if (fileNameElement) {
                 fileNameElement.textContent = `📄 ${file.name}`;
             }
@@ -585,7 +589,6 @@
                 fileSizeElement.textContent = `${sizeMB} MB`;
             }
             
-            // Show preview for images
             if (type === 'image' && file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
@@ -599,7 +602,7 @@
                 fileInfoDiv.style.display = 'block';
             }
         }
-        // Upload area drag & drop
+
         function setupUploadArea(areaId, inputId) {
             const area = document.getElementById(areaId);
             const input = document.getElementById(inputId);
@@ -619,12 +622,10 @@
                 e.preventDefault();
                 area.classList.remove('dragover');
                 input.files = e.dataTransfer.files;
-                // Update file info
                 const type = inputId === 'imageFile' ? 'image' : 'video';
                 updateFileInfo(type, input.files[0]);
             });
             
-            // Handle file selection
             input.addEventListener('change', (e) => {
                 const type = inputId === 'imageFile' ? 'image' : 'video';
                 updateFileInfo(type, e.target.files[0]);
@@ -632,21 +633,20 @@
         }
         setupUploadArea('imageUploadArea', 'imageFile');
         setupUploadArea('videoUploadArea', 'videoFile');
-        // Webcam functions
+
+        // --- WEBCAM TỐI ƯU HÓA CỰC HẠN (COORDINATES-ONLY + CANVAS LERP) ---
         async function startWebcam() {
             try {
-                const webcamElement = document.getElementById('webcamVideo');
                 const startBtn = document.querySelector('#startWebcamBtn');
                 const stopBtn = document.querySelector('#stopWebcamBtn');
                 const statusIndicator = document.getElementById('webcamStatus');
                 
-                // Request camera access
                 webcamStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { width: 640, height: 480 },
                     audio: false 
                 });
                 
-                webcamElement.srcObject = webcamStream;
+                videoEl.srcObject = webcamStream;
                 webcamRunning = true;
                 isProcessing = false;
                 startBtn.disabled = true;
@@ -654,14 +654,16 @@
                 statusIndicator.textContent = '🟢 Active';
                 statusIndicator.style.color = '#4CAF50';
                 
-                // Start detection loop
+                // Khởi động luồng gửi frame ngầm và vòng lặp vẽ 60 FPS
                 startDetectionLoop();
+                renderOverlayLoop();
                 
             } catch (error) {
                 alert('Error accessing camera: ' + error.message);
                 console.error('Camera error:', error);
             }
         }
+
         function stopWebcam() {
             if (webcamStream) {
                 webcamStream.getTracks().forEach(track => track.stop());
@@ -669,59 +671,59 @@
             
             webcamRunning = false;
             clearInterval(detectionInterval);
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
             
             const startBtn = document.querySelector('#startWebcamBtn');
             const stopBtn = document.querySelector('#stopWebcamBtn');
             const statusIndicator = document.getElementById('webcamStatus');
-            const resultImg = document.getElementById('webcamResult');
-            const placeholder = document.getElementById('webcamPlaceholder');
             
             startBtn.disabled = false;
             stopBtn.disabled = true;
             statusIndicator.textContent = '🔴 Inactive';
             statusIndicator.style.color = '#f44336';
-            resultImg.style.display = 'none';
-            placeholder.style.display = 'block';
             
-            // Reset stats
+            // Xóa sạch canvas vẽ
+            if (overlayCtx) {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            }
+            targetBoxes = [];
+            currentBoxes = [];
+            
             frameCount = 0;
             startTime = null;
             isProcessing = false;
         }
-        async function startDetectionLoop() {
+
+        function startDetectionLoop() {
             const model = document.getElementById('webcamModel').value;
-            const webcamElement = document.getElementById('webcamVideo');
-            const resultImg = document.getElementById('webcamResult');
-            const placeholder = document.getElementById('webcamPlaceholder');
-            
             startTime = Date.now();
             
             detectionInterval = setInterval(async () => {
-                if (!webcamRunning || webcamElement.readyState !== webcamElement.HAVE_ENOUGH_DATA) {
+                if (!webcamRunning || videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA) {
                     return;
                 }
                 
-                // Skip if still processing previous frame
-                if (isProcessing) {
-                    return;
-                }
+                if (isProcessing) return;
                 
                 try {
                     isProcessing = true;
                     
-                    // Create canvas from video frame
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = 480; // Reduced width for faster processing
-                    tempCanvas.height = 360;
-                    const tempCtx = tempCanvas.getContext('2d');
-                    tempCtx.drawImage(webcamElement, 0, 0, 480, 360);
+                    const scale = SEND_WIDTH / videoEl.videoWidth;
+                    captureCanvas.width = SEND_WIDTH;
+                    captureCanvas.height = Math.round(videoEl.videoHeight * scale);
                     
-                    // Convert to blob and send to server
-                    tempCanvas.toBlob(async (blob) => {
+                    captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+                    
+                    captureCanvas.toBlob(async (blob) => {
                         try {
+                            if (!blob) {
+                                isProcessing = false;
+                                return;
+                            }
                             const formData = new FormData();
                             formData.append('file', blob, 'webcam.jpg');
                             formData.append('model', model);
+                            formData.append('mode', 'webcam'); // Kích hoạt chế độ Coordinates-Only ở Backend
                             
                             const response = await fetch('/api/detect-image', {
                                 method: 'POST',
@@ -731,7 +733,6 @@
                             const data = await response.json();
                             
                             if (data.success && webcamRunning) {
-                                // Update stats
                                 frameCount++;
                                 const elapsed = (Date.now() - startTime) / 1000;
                                 const fps = (frameCount / elapsed).toFixed(1);
@@ -740,24 +741,74 @@
                                 document.getElementById('webcamFPS').textContent = fps;
                                 document.getElementById('webcamDuration').textContent = elapsed.toFixed(1) + 's';
                                 
-                                // Show result image
-                                resultImg.src = data.image;
-                                resultImg.style.display = 'block';
-                                placeholder.style.display = 'none';
+                                // Nhận mảng tọa độ thô và chuẩn hóa theo kích thước thật của thẻ Video trên client
+                                const ratioX = overlayCanvas.clientWidth / data.frame_width;
+                                const ratioY = overlayCanvas.clientHeight / data.frame_height;
+                                
+                                targetBoxes = data.detections.boxes.map(b => ({
+                                    x1: b.x1 * ratioX,
+                                    y1: b.y1 * ratioY,
+                                    w: b.w * ratioX,
+                                    h: b.h * ratioY,
+                                    conf: b.conf
+                                }));
                             }
                             isProcessing = false;
                         } catch (error) {
-                            console.error('Detection error:', error);
+                            console.error('Detection request error:', error);
                             isProcessing = false;
                         }
-                    }, 'image/jpeg', 0.7); // Balanced quality
+                    }, 'image/jpeg', 0.65);
                     
                 } catch (error) {
-                    console.error('Canvas error:', error);
+                    console.error('Capture frame error:', error);
                     isProcessing = false;
                 }
-            }, 150); // Process every 150ms (~6-7 FPS)
+            }, 120); // Gửi frame định kỳ ~8 FPS lên server để tiết kiệm băng thông tối đa
         }
+
+        // Vòng lặp Render độc lập 60 FPS với công nghệ Nội suy tuyến tính (Lerp)
+        function renderOverlayLoop() {
+            if (!webcamRunning) return;
+
+            if (overlayCanvas.width !== videoEl.clientWidth || overlayCanvas.height !== videoEl.clientHeight) {
+                overlayCanvas.width = videoEl.clientWidth;
+                overlayCanvas.height = videoEl.clientHeight;
+            }
+
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            if (currentBoxes.length !== targetBoxes.length) {
+                currentBoxes = targetBoxes.map(b => ({ ...b }));
+            } else {
+                const alpha = 0.4; // Hệ số nội suy làm mượt chuyển động khung hình
+                for (let i = 0; i < targetBoxes.length; i++) {
+                    currentBoxes[i].x1 += alpha * (targetBoxes[i].x1 - currentBoxes[i].x1);
+                    currentBoxes[i].y1 += alpha * (targetBoxes[i].y1 - currentBoxes[i].y1);
+                    currentBoxes[i].w  += alpha * (targetBoxes[i].w  - currentBoxes[i].w);
+                    currentBoxes[i].h  += alpha * (targetBoxes[i].h  - currentBoxes[i].h);
+                    currentBoxes[i].conf = targetBoxes[i].conf;
+                }
+            }
+
+            overlayCtx.lineWidth = 3;
+            overlayCtx.font = "bold 14px Segoe UI, sans-serif";
+
+            for (const box of currentBoxes) {
+                overlayCtx.strokeStyle = "#00FF88";
+                overlayCtx.strokeRect(box.x1, box.y1, box.w, box.h);
+
+                const label = `${(box.conf * 100).toFixed(0)}%`;
+                const textWidth = overlayCtx.measureText(label).width;
+                overlayCtx.fillStyle = "#00FF88";
+                overlayCtx.fillRect(box.x1, Math.max(0, box.y1 - 22), textWidth + 10, 22);
+                overlayCtx.fillStyle = "#000000";
+                overlayCtx.fillText(label, box.x1 + 5, Math.max(15, box.y1 - 6));
+            }
+
+            animationFrameId = requestAnimationFrame(renderOverlayLoop);
+        }
+
         // Dark Mode Toggle
         function toggleDarkMode() {
             const body = document.body;
@@ -776,12 +827,10 @@
             }
         }
 
-        // Load saved theme
         if (localStorage.getItem('theme') === 'dark') {
             toggleDarkMode();
         }
 
-        // Detect image
         async function detectImage() {
             const file = document.getElementById('imageFile').files[0];
             const model = document.getElementById('imageModel').value;
@@ -802,7 +851,6 @@
             document.getElementById('imageResult').style.display = 'none';
             showMessage('imageMessage', '', 'info');
             
-            // Simulate progress
             const progressFill = document.querySelector('#imageProgress .progress-fill');
             let progress = 0;
             const progressInterval = setInterval(() => {
@@ -823,14 +871,11 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    //Rating box display
                     lastFilename = file.name;
                     lastModel = model;
                     resetRatingForm();
-                    // Display image
                     document.getElementById('resultImage').src = data.image;
                     
-                    // Handle Gallery
                     const cropsContainer = document.getElementById('cropsContainer');
                     const gallerySection = document.getElementById('gallerySection');
                     cropsContainer.innerHTML = '';
@@ -856,10 +901,8 @@
                         gallerySection.style.display = 'none';
                     }
 
-                    // Display detection stats
                     document.getElementById('faceCount').textContent = data.detections.count;
                     
-                    // Display faces list
                     const facesList = document.getElementById('facesList');
                     facesList.innerHTML = '';
                     
@@ -879,11 +922,11 @@
                         const listDiv = document.getElementById('facesList');
                         listDiv.style.display = 'none'; 
                         toggleBtn.style.display = 'block';
-                        toggleBtn.innerHTML = `👁️ Xem chi tiết (${data.detections.count} khuôn mặt)`;
+                        toggleBtn.innerHTML = `👁️ Detail List (${data.detections.count} faces)`;
                     } else {
                         facesList.innerHTML = '<p style="color: #999;">No faces detected</p>';
-                        facesList.style.display = 'block'; // No face then noti
-                        document.getElementById('toggleFacesBtn').style.display = 'none'; // Hide button
+                        facesList.style.display = 'block'; 
+                        document.getElementById('toggleFacesBtn').style.display = 'none'; 
                     }
                     
                     document.getElementById('imageResult').style.display = 'block';
@@ -900,7 +943,7 @@
                 document.getElementById('detectImageBtn').disabled = false;
             }
         }
-        // Detect video
+
         async function detectVideo() {
             const file = document.getElementById('videoFile').files[0];
             const model = document.getElementById('videoModel').value;
@@ -919,7 +962,6 @@
             document.getElementById('videoResult').style.display = 'none';
             showMessage('videoMessage', '', 'info');
             
-            // Simulate progress
             const progressFill = document.querySelector('#videoProgress .progress-fill');
             let progress = 0;
             const progressInterval = setInterval(() => {
@@ -949,7 +991,6 @@
                     `;
                     document.getElementById('downloadLink').href = data.download_url;
                     
-                    // Display video if available
                     const outputVideo = document.getElementById('outputVideo');
                     outputVideo.src = data.download_url;
                     outputVideo.style.display = 'block';
@@ -968,7 +1009,7 @@
                 document.getElementById('detectVideoBtn').disabled = false;
             }
         }
-        // Show message
+
         function showMessage(elementId, text, type) {
             const element = document.getElementById(elementId);
             if (text) {
@@ -978,7 +1019,7 @@
                 element.className = 'message';
             }
         }
-        // Download result image
+
         function downloadImage() {
             const resultImage = document.getElementById('resultImage');
             const imageFile = document.getElementById('imageFile').files[0];
@@ -988,21 +1029,18 @@
                 return;
             }
             
-            // Create a temporary link element
             const link = document.createElement('a');
             link.href = resultImage.src;
             
-            // Generate filename
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
             const originalName = imageFile ? imageFile.name.split('.')[0] : 'detection';
             link.download = `${originalName}_detected_${timestamp}.jpg`;
             
-            // Trigger download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
-        // Clear forms
+
         function clearImageForm() {
             document.getElementById('imageFile').value = '';
             document.getElementById('imageFileInfo').style.display = 'none';
@@ -1012,6 +1050,7 @@
             const ratingSection = document.getElementById('ratingSection');
             if (ratingSection) ratingSection.style.display = 'none';
         }
+
         function clearVideoForm() {
             document.getElementById('videoFile').value = '';
             document.getElementById('videoFileInfo').style.display = 'none';
@@ -1021,7 +1060,7 @@
             const videoRatingSection = document.getElementById('videoRatingSection');
             if (videoRatingSection) videoRatingSection.style.display = 'none';
         }
-        // ---  RATING ---
+
         function resetRatingForm() {
             document.getElementById("ratingSection").style.display = "block";
             document.getElementById("fbComment").value = "";
@@ -1029,6 +1068,7 @@
             stars.forEach(star => star.checked = false);
             document.getElementById("ratingSection").scrollIntoView({ behavior: 'smooth' });
         }
+
         async function sendFeedback() {
             const ratingEl = document.querySelector('input[name="rating"]:checked');
             if (!ratingEl) {
@@ -1067,6 +1107,7 @@
                 btn.disabled = false;
             }
         }
+
         function toggleFacesList() {
             const list = document.getElementById('facesList');
             const btn = document.getElementById('toggleFacesBtn');
@@ -1081,6 +1122,7 @@
                 btn.style.background = 'transparent';
             }
         }
+
         function resetVideoRatingForm() {
             document.getElementById("videoRatingSection").style.display = "block";
             document.getElementById("videoFbComment").value = "";
@@ -1088,13 +1130,13 @@
             stars.forEach(star => star.checked = false);
             document.getElementById("videoRatingSection").scrollIntoView({ behavior: 'smooth' });
         }
+
         async function sendVideoFeedback() {
             const ratingEl = document.querySelector('input[name="videoRating"]:checked');
             if (!ratingEl) {
                 alert("Please choose a number of stars! ⭐");
                 return;
             }
-            // [SỬA LẠI LOGIC LẤY COMMENT]
             const commentBox = document.getElementById("videoFbComment");
             const comment = commentBox ? commentBox.value : "";
             const rating = ratingEl.value;
@@ -1118,7 +1160,7 @@
                     alert("Thank you for your feedback! ❤️");
                     document.getElementById("videoRatingSection").style.display = "none";
                 } else {
-                    alert("Lỗi: " + (data.error || data.message || "Unidentified error"));
+                    alert("Error: " + (data.error || data.message || "Unidentified error"));
                 }
             } catch (error) {
                 console.error("Error sending feedback:", error);

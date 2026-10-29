@@ -11,6 +11,8 @@ Flask-Limiter
 pymysql
 cryptography
 python-dotenv
+PyTurboJPEG
+gunicorn
 
 # Utilities
 Pillow
