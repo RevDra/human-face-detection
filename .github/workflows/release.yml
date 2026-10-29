@@ -27,9 +27,6 @@ jobs:
       - name: Run Semantic Release
         uses: cycjimmy/semantic-release-action@v8.1.4
         with:
-          extra_plugins: |
-            @semantic-release/commit-analyzer
-            @semantic-release/release-notes-generator
-            @semantic-release/github
+          skip_npm_plugin: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
