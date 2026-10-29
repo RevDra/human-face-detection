@@ -12,7 +12,7 @@
 </div>
 <br>
 
-A professional, real-time face detection system built with YOLOv12 ONNX Runtime and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy and speed, running entirely on a lightweight, zero-PyTorch architecture. 
+A professional, real-time face detection system built with **YOLOv12 INT8 ONNX Runtime** and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 combined with **Static INT8 Quantization** to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy, ultra-low latency, and zero-PyTorch architecture footprint.
 
 View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 
@@ -34,11 +34,12 @@ View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 - Built-in MySQL database integration (via Aiven) to collect user ratings and feedback securely.
 - Ready for admin dashboard visualization.
 
-### 🤖 Model Selection (ONNX Runtime)
-- **YOLOv12 Nano** (yolov12n-face.onnx) - Super Fast, best for CPU/Webcam.
-- **YOLOv12 Small** (yolov12s-face.onnx) - Balanced speed & accuracy.
-- **YOLOv12 Medium** (yolov12m-face.onnx) - High precision (The "Sweet Spot").
-- **YOLOv12 Large** (yolov12l-face.onnx) - State-of-the-art accuracy for high-res images.
+### 🤖 Pure INT8 ONNX Runtime Models
+All models are statically quantized to INT8, achieving over ~70% reduction in file size while maintaining state-of-the-art accuracy:
+- **YOLOv12 Nano** - Super Fast (~3.6 MB), best for CPU/Webcam.
+- **YOLOv12 Small** - Balanced speed & accuracy (~10.1 MB).
+- **YOLOv12 Medium** - High precision (~20.7 MB).
+- **YOLOv12 Large** - State-of-the-art accuracy (~27.7 MB).
 
 ---
 
@@ -59,7 +60,7 @@ graph TD
     %% Backend & API
     API_Detect[/API: /api/detect-image & video/]
     FlaskBackend[Flask Backend Server]
-    YOLO_Engine[YOLOv12 ONNX Inference Engine]
+    YOLO_Engine[YOLOv12 INT8 ONNX Inference Engine]
     
     %% Results & Post-processing
     Results[Extract Bounding Box, Confidence, Count]
@@ -194,6 +195,7 @@ Human_face_detection/
 │   │   └── feature_request.md       # Feature request template
 │   ├── workflows/
 │   │   ├── docker-publish.yml       # Auto-build Docker Image
+|   |   ├── release.yml             # Automated Semantic Release CI/CD
 │   │   └── lint.yml                 # Quality Check (Black + Flake8 + isort + Mypy)
 │   ├── dependabot.yml               # Automated Dependency Updates
 │   └── FUNDING.yml                  # Sponsor settings
@@ -209,8 +211,9 @@ Human_face_detection/
 │   └── DEPLOYMENT_GUIDE.md          # Detailed deployment guide
 │
 ├── models/                          # YOLOv12 ONNX Models
-│   ├── yolov12n-face.onnx           # Nano model (Fastest)
-│   ├── yolov12s-face.onnx           # Small model (Balanced)
+│   ├── yolov12n-face-int8.onnx           # Nano model
+│   ├── yolov12s-face-int8.onnx           # Small model
+│   ├── yolov12m-face-int8.onnx           # Medium model
 │   ├── MODELS.md                    # Download instructions for Med/Large models
 │   └── training/                    # Source code & benchmarks (Loss, PR curves, etc.)
 │
@@ -334,10 +337,10 @@ Edit `web_app.py` to modify:
 
 Model files are required in the `models/` directory:
 
-* `yolov12n-face.onnx` ✅ Included
-* `yolov12s-face.onnx` ✅ Included
-* `yolov12m-face.onnx` 📥 [Download](https://github.com/YapaLab/yolo-face)
-* `yolov12l-face.onnx` 📥 [Download](https://github.com/YapaLab/yolo-face)
+* `yolov12n-face-int8.onnx` ✅ Included
+* `yolov12s-face-int8.onnx` ✅ Included
+* `yolov12m-face-int8.onnx` ✅ Included
+* `yolov12l-face-int8.onnx` 📥 [Download](https://github.com/YapaLab/yolo-face), then use the pipeline in `models/` to help you transform ONNX FP32 to INT8
 
 **See [models/MODELS.md](https://www.google.com/search?q=models/MODELS.md) for detailed download instructions.**
 
