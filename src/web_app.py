@@ -30,9 +30,11 @@ from werkzeug.utils import secure_filename
 
 try:
     from turbojpeg import TurboJPEG
+
     jpeg_engine = TurboJPEG()
 except Exception:
     jpeg_engine = None
+
 
 def decode_image_fast(image_bytes: bytes):
     """Decode images using TurboJPEG if have, else OpenCV"""
@@ -44,6 +46,7 @@ def decode_image_fast(image_bytes: bytes):
     nparr = np.frombuffer(image_bytes, np.uint8)
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+
 def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
     """Zip to TurboJPEG"""
     if jpeg_engine is not None:
@@ -53,6 +56,7 @@ def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
             pass
     _, buffer = cv2.imencode(".jpg", image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     return buffer.tobytes()
+
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
@@ -183,7 +187,7 @@ def detect_image():
         # Get parameters
         model = request.form.get("model", "yolov12s-face-int8.onnx")
         blur = request.form.get("blur") == "true"
-        
+
         # Nhận diện xem request có phải đến từ luồng Webcam hay không
         is_webcam = request.form.get("mode") == "webcam" or "webcam" in file.filename.lower()
 
@@ -208,27 +212,29 @@ def detect_image():
 
         # --- NHÁNH 1: WEBCAM (CHỈ TRẢ VỀ TỌA ĐỘ - ZERO SERVER-SIDE RENDERING) ---
         if is_webcam:
-            return jsonify({
-                "success": True,
-                "mode": "coordinates_only",
-                "frame_width": img_w,
-                "frame_height": img_h,
-                "detections": {
-                    "count": len(detections),
-                    "boxes": [
-                        {
-                            "x1": det["x1"],
-                            "y1": det["y1"],
-                            "x2": det["x2"],
-                            "y2": det["y2"],
-                            "w": det["w"],
-                            "h": det["h"],
-                            "conf": round(det["confidence"], 3),
-                        }
-                        for det in detections
-                    ],
-                },
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "mode": "coordinates_only",
+                    "frame_width": img_w,
+                    "frame_height": img_h,
+                    "detections": {
+                        "count": len(detections),
+                        "boxes": [
+                            {
+                                "x1": det["x1"],
+                                "y1": det["y1"],
+                                "x2": det["x2"],
+                                "y2": det["y2"],
+                                "w": det["w"],
+                                "h": det["h"],
+                                "conf": round(det["confidence"], 3),
+                            }
+                            for det in detections
+                        ],
+                    },
+                }
+            )
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         if blur:
