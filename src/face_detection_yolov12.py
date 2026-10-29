@@ -127,9 +127,11 @@ class YOLOv12FaceDetector:
 
         predictions = np.squeeze(raw_output)
         if predictions.ndim == 2 and predictions.shape[0] < predictions.shape[1]:
-            predictions = predictions.T  
+            predictions = predictions.T
 
-        scores = np.max(predictions[:, 4:], axis=1) if predictions.shape[1] > 5 else predictions[:, 4]
+        scores = (
+            np.max(predictions[:, 4:], axis=1) if predictions.shape[1] > 5 else predictions[:, 4]
+        )
 
         valid_mask = scores >= conf_threshold
         predictions = predictions[valid_mask]
