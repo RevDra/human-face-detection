@@ -16,7 +16,7 @@ import base64
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 import cv2
 import numpy as np
@@ -36,7 +36,7 @@ except Exception:
     jpeg_engine = None
 
 
-def decode_image_fast(image_bytes: bytes):
+def decode_image_fast(image_bytes: bytes) -> np.ndarray:
     """Decode images using TurboJPEG if have, else OpenCV"""
     if jpeg_engine is not None:
         try:
@@ -46,17 +46,17 @@ def decode_image_fast(image_bytes: bytes):
     nparr = np.frombuffer(image_bytes, np.uint8)
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-
 def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
     """Zip to TurboJPEG"""
     if jpeg_engine is not None:
         try:
-            return jpeg_engine.encode(image_bgr, quality=quality)
+            res = jpeg_engine.encode(image_bgr, quality=quality)
+            if res is not None:
+                return cast(bytes, res)
         except Exception:
             pass
     _, buffer = cv2.imencode(".jpg", image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
-    return buffer.tobytes()
-
+    return bytes(buffer)
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
