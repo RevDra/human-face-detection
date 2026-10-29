@@ -83,12 +83,14 @@ class YOLOv12FaceDetector:
         self.input_width = input_shape[3] if isinstance(input_shape[3], int) else 640
 
         self.input_size = self.input_height
-        self._letterbox_buffer = np.full((self.input_height, self.input_width, 3), 114, dtype=np.uint8)
+        self._letterbox_buffer = np.full(
+            (self.input_height, self.input_width, 3), 114, dtype=np.uint8
+        )
         self._blob_buffer = np.empty((1, 3, self.input_height, self.input_width), dtype=np.float32)
 
         dummy_input = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
         self.session.run(None, {self.input_name: dummy_input})
-        
+
         self._initialized = True
 
     def _preprocess(self, image):
