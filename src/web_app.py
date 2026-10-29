@@ -46,6 +46,7 @@ def decode_image_fast(image_bytes: bytes) -> np.ndarray:
     nparr = np.frombuffer(image_bytes, np.uint8)
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+
 def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
     """Zip to TurboJPEG"""
     if jpeg_engine is not None:
@@ -57,6 +58,7 @@ def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
             pass
     _, buffer = cv2.imencode(".jpg", image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     return bytes(buffer)
+
 
 from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
 
