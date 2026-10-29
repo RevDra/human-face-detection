@@ -63,6 +63,7 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+
 class Feedback(db.Model):  # type: ignore
     __tablename__ = "feedbacks"
     id = db.Column(db.Integer, primary_key=True)
@@ -72,12 +73,14 @@ class Feedback(db.Model):  # type: ignore
     comment = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 with app.app_context():
     try:
         db.create_all()
         print("Connect to MySQL successfully!")
     except Exception as e:
         print(f"Connection error: {e}")
+
 
 def get_detector(model_name):
     """
@@ -113,24 +116,29 @@ def get_detector(model_name):
 
     return YOLOv12FaceDetector(final_path.name)
 
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def is_image(filename):
     """Check if file is image"""
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"jpg", "jpeg", "png", "gif"}
 
+
 def is_video(filename):
     """Check if file is video"""
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+
 @app.route("/")
 def index():
     """Main page"""
     return render_template("index.html")
+
 
 @app.route("/api/detect-image", methods=["POST"])
 def detect_image():
@@ -207,6 +215,7 @@ def detect_image():
         logging.exception("Error during image detection")
         return jsonify({"error": "Internal server error during image detection"}), 500
 
+
 @app.route("/api/detect-video", methods=["POST"])
 @limiter.limit("5 per hour")
 def detect_video():
@@ -273,6 +282,7 @@ def download_file(filename):
         app.logger.exception("Error while processing download request for %s", filename)
         return jsonify({"error": "Internal server error"}), 500
 
+
 @app.route("/api/models", methods=["GET"])
 def get_models():
     """Get ALL available ONNX models for dropdown selection"""
@@ -314,6 +324,7 @@ def get_models():
 
     return jsonify(sorted_available)
 
+
 @app.route("/api/feedback", methods=["POST"])
 @limiter.limit("5 per minute")
 def submit_feedback():
@@ -333,20 +344,24 @@ def submit_feedback():
         app.logger.error(f"DB Error: {e}")
         return jsonify({"error": "Database error"}), 500
 
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "service": "Face Detection ONNX API"})
+
 
 @app.errorhandler(413)
 def request_entity_too_large(error):
     """Handle file size exceeded"""
     return jsonify({"error": "File too large. Maximum 500MB allowed"}), 413
 
+
 @app.errorhandler(500)
 def internal_error(error):
     """Handle internal server error"""
     return jsonify({"error": "Internal server error"}), 500
+
 
 @app.errorhandler(RateLimitExceeded)
 def handle_rate_limit_error(e):
