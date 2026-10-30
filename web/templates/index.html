@@ -483,7 +483,7 @@
 
         <div class="footer text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
             <p class="mb-1 text-white-50">
-                🚀 YOLOv12 Face Detection Web - Version 1.6.0 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
+                🚀 YOLOv12 Face Detection Web - Version 1.6.1 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
             </p>
             <p class="mb-0 small text-muted">
                 2026 &copy; Developed by <a href="mailto:luongminhngoc0@gmail.com">Ngoc M. Luong</a> with ❤️
@@ -989,11 +989,13 @@
                         ✅ Video processing complete!<br>
                         <small>Output file: ${data.output_file}</small>
                     `;
-                    document.getElementById('downloadLink').href = data.download_url;
-                    
+
+                    document.getElementById('downloadLink').href = `${data.download_url}?download=1`;
+
                     const outputVideo = document.getElementById('outputVideo');
-                    outputVideo.src = data.download_url;
+                    outputVideo.src = `${data.download_url}?t=${Date.now()}`;
                     outputVideo.style.display = 'block';
+                    outputVideo.load();
                     
                     document.getElementById('videoResult').style.display = 'block';
                     showMessage('videoMessage', `✅ ${data.message}`, 'success');
@@ -1142,7 +1144,7 @@
             const rating = ratingEl.value;
             const btn = event.target;
             const originalText = btn.innerText;
-            btn.innerText = "Đang gửi...";
+            btn.innerText = "Sending...";
             btn.disabled = true;
             try {
                 const response = await fetch('/api/feedback', {
