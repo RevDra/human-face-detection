@@ -1,12 +1,11 @@
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
 import cv2
 import numpy as np
 import onnxruntime as ort
-
-import shutil
-import subprocess
 
 
 class YOLOv12FaceDetector:
@@ -303,13 +302,20 @@ def detect_from_video(
             try:
                 subprocess.run(
                     [
-                        "ffmpeg", "-y",
-                        "-i", temp_output,
-                        "-c:v", "libx264",
-                        "-preset", "fast",
-                        "-crf", "23",
-                        "-pix_fmt", "yuv420p",
-                        "-movflags", "+faststart",
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        temp_output,
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        "fast",
+                        "-crf",
+                        "23",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-movflags",
+                        "+faststart",
                         str(output_path),
                     ],
                     check=True,

@@ -302,10 +302,10 @@ def detect_video():
 
         raw_model = request.form.get("model", "yolov12n-face-int8.onnx")
         model = Path(raw_model).name
-        
+
         if model.endswith(".pt"):
             model = model.replace(".pt", ".onnx")
-            
+
         if not model.endswith(".onnx"):
             model = f"{model}.onnx"
 
@@ -340,6 +340,7 @@ def detect_video():
     except Exception:
         app.logger.exception("Error while processing video detection request")
         return jsonify({"error": "Internal server error"}), 500
+
 
 @app.route("/api/download/<filename>", methods=["GET"])
 def download_file(filename):
