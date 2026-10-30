@@ -6,8 +6,7 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 
 import os
 
-# --- TỐI ƯU HÓA LUỒNG CPU CHO ONNX RUNTIME (BẮT BUỘC) ---
-# Thiết lập trước khi import cv2, numpy hay torch để tránh cấp phát quá tải luồng CPU
+# --- Optimizing ONNX Runtime ---
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
@@ -240,9 +239,9 @@ def detect_image():
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         if blur:
-            result_image = detector.blur_faces(image, detections)
+            result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
         else:
-            result_image = detector.draw_faces(image, detections, show_conf=True)
+            result_image = detector.draw_faces(image, detections, show_conf=True, blur_faces=blur)
 
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
@@ -301,14 +300,18 @@ def detect_video():
         if not allowed_file(file.filename) or not is_video(file.filename):
             return jsonify({"error": "Only video files allowed"}), 400
 
-        # Get model selection
-        model = request.form.get("model", "yolov12m-face.onnx")
-        if not model.endswith(".onnx"):
+        raw_model = request.form.get("model", "yolov12n-face-int8.onnx")
+        model = Path(raw_model).name
+
+        if model.endswith(".pt"):
             model = model.replace(".pt", ".onnx")
 
+        if not model.endswith(".onnx"):
+            model = f"{model}.onnx"
+
         if model not in ALLOWED_MODELS:
-            app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Medium).")
-            model = "yolov12m-face.onnx"
+            app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Nano INT8).")
+            model = "yolov12n-face-int8.onnx"
 
         # Save uploaded file
         filename = secure_filename(file.filename)
@@ -316,10 +319,10 @@ def detect_video():
         output_path = UPLOAD_FOLDER / f"output_{filename}"
         file.save(input_path)
 
-        # Detect faces in video
+        # Detect faces in video (Truyền đúng tên file đơn thuần `model`)
         detect_from_video(
             video_path=str(input_path),
-            model_path=str(MODELS_DIR / model),
+            model_path=model,
             output_path=str(output_path),
             conf_threshold=0.32,
         )

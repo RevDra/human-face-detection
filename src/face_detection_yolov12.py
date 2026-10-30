@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
@@ -264,12 +266,13 @@ def detect_from_video(
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
 
     detector = YOLOv12FaceDetector(model_path)
+    temp_output = str(output_path) + ".temp.mp4" if output_path else None
     writer = (
-        cv2.VideoWriter(str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
-        if output_path
+        cv2.VideoWriter(temp_output, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        if temp_output
         else None
     )
 
@@ -293,3 +296,34 @@ def detect_from_video(
     cap.release()
     if writer:
         writer.release()
+
+    if output_path and temp_output and Path(temp_output).exists():
+        if shutil.which("ffmpeg"):
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        temp_output,
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        "fast",
+                        "-crf",
+                        "23",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-movflags",
+                        "+faststart",
+                        str(output_path),
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                Path(temp_output).unlink(missing_ok=True)
+            except Exception:
+                Path(temp_output).replace(output_path)
+        else:
+            Path(temp_output).replace(output_path)
