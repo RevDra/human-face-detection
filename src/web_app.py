@@ -6,7 +6,6 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 
 import os
 
-# --- Optimizing ONNX Runtime ---
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
@@ -239,7 +238,7 @@ def detect_image():
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         if blur:
-            result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
+            result_image = detector.draw_faces(image, detections, show_conf=False,blur_faces=blur)
         else:
             result_image = detector.draw_faces(image, detections, show_conf=True, blur_faces=blur)
 
@@ -300,12 +299,11 @@ def detect_video():
         if not allowed_file(file.filename) or not is_video(file.filename):
             return jsonify({"error": "Only video files allowed"}), 400
 
+        # Get model selection
         raw_model = request.form.get("model", "yolov12n-face-int8.onnx")
         model = Path(raw_model).name
-
         if model.endswith(".pt"):
             model = model.replace(".pt", ".onnx")
-
         if not model.endswith(".onnx"):
             model = f"{model}.onnx"
 
@@ -319,7 +317,7 @@ def detect_video():
         output_path = UPLOAD_FOLDER / f"output_{filename}"
         file.save(input_path)
 
-        # Detect faces in video (Truyền đúng tên file đơn thuần `model`)
+        # Detect faces in video
         detect_from_video(
             video_path=str(input_path),
             model_path=model,
@@ -344,14 +342,20 @@ def detect_video():
 
 @app.route("/api/download/<filename>", methods=["GET"])
 def download_file(filename):
-    """Download processed file"""
     try:
         filepath = UPLOAD_FOLDER / secure_filename(filename)
         if not filepath.exists():
             return jsonify({"error": "File not found"}), 404
 
-        return send_file(filepath, as_attachment=True)
-    except Exception as e:
+        as_attachment = request.args.get("download") == "1"
+
+        return send_file(
+            filepath,
+            mimetype="video/mp4",
+            as_attachment=as_attachment,
+            conditional=True, 
+        )
+    except Exception:
         app.logger.exception("Error while processing download request for %s", filename)
         return jsonify({"error": "Internal server error"}), 500
 
