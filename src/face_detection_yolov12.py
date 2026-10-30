@@ -257,9 +257,6 @@ def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0
 def detect_from_video(
     video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2
 ):
-    """
-    Process videos with frame striding (2-frame steps).
-    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return
@@ -269,6 +266,7 @@ def detect_from_video(
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
 
     detector = YOLOv12FaceDetector(model_path)
+
     temp_output = str(output_path) + ".temp.mp4" if output_path else None
     writer = (
         cv2.VideoWriter(temp_output, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
