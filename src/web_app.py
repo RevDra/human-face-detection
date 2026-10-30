@@ -238,7 +238,7 @@ def detect_image():
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         if blur:
-            result_image = detector.draw_faces(image, detections, show_conf=False,blur_faces=blur)
+            result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
         else:
             result_image = detector.draw_faces(image, detections, show_conf=True, blur_faces=blur)
 
@@ -353,7 +353,7 @@ def download_file(filename):
             filepath,
             mimetype="video/mp4",
             as_attachment=as_attachment,
-            conditional=True, 
+            conditional=True,
         )
     except Exception:
         app.logger.exception("Error while processing download request for %s", filename)
