@@ -252,10 +252,10 @@ class YOLOv12FaceDetector:
 
 
 def _compute_iou(boxA: Dict[str, Any], boxB: Dict[str, Any]) -> float:
-    xA = max(boxA["x1"], boxB["x1"])
-    yA = max(boxA["y1"], boxB["y1"])
-    xB = min(boxA["x2"], boxB["x2"])
-    yB = min(boxA["y2"], boxB["y2"])
+    xA = max(int(boxA["x1"]), int(boxB["x1"]))
+    yA = max(int(boxA["y1"]), int(boxB["y1"]))
+    xB = min(int(boxA["x2"]), int(boxB["x2"]))
+    yB = min(int(boxA["y2"]), int(boxB["y2"]))
 
     inter_w = max(0, xB - xA)
     inter_h = max(0, yB - yA)
@@ -263,9 +263,9 @@ def _compute_iou(boxA: Dict[str, Any], boxB: Dict[str, Any]) -> float:
     if inter_area == 0:
         return 0.0
 
-    areaA = max(1, boxA["w"] * boxA["h"])
-    areaB = max(1, boxB["w"] * boxB["h"])
-    return inter_area / float(areaA + areaB - inter_area)
+    areaA = max(1, int(boxA["w"]) * int(boxA["h"]))
+    areaB = max(1, int(boxB["w"]) * int(boxB["h"]))
+    return float(inter_area) / float(areaA + areaB - inter_area)
 
 
 def _interpolate_detections(
