@@ -1,6 +1,6 @@
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any, Dict, List
 
 import cv2
@@ -89,9 +89,7 @@ class YOLOv12FaceDetector:
             (self.input_height, self.input_width, 3), 114, dtype=np.uint8
         )
 
-        dummy_input = np.zeros(
-            (1, 3, self.input_height, self.input_width), dtype=np.float32
-        )
+        dummy_input = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
         self.session.run(None, {self.input_name: dummy_input})
 
         self._initialized = True
@@ -147,9 +145,7 @@ class YOLOv12FaceDetector:
             predictions = predictions.T
 
         scores = (
-            np.max(predictions[:, 4:], axis=1)
-            if predictions.shape[1] > 5
-            else predictions[:, 4]
+            np.max(predictions[:, 4:], axis=1) if predictions.shape[1] > 5 else predictions[:, 4]
         )
 
         valid_mask = scores >= conf_threshold
@@ -168,9 +164,7 @@ class YOLOv12FaceDetector:
         y1 = cy - h / 2.0
 
         nms_boxes = np.column_stack((x1, y1, w, h)).tolist()
-        indices = cv2.dnn.NMSBoxes(
-            nms_boxes, scores.tolist(), conf_threshold, iou_threshold
-        )
+        indices = cv2.dnn.NMSBoxes(nms_boxes, scores.tolist(), conf_threshold, iou_threshold)
 
         detections = []
         if len(indices) > 0:
@@ -198,9 +192,7 @@ class YOLOv12FaceDetector:
 
         return detections
 
-    def draw_faces(
-        self, image, detections, show_conf=True, blur_faces=False, inplace=False
-    ):
+    def draw_faces(self, image, detections, show_conf=True, blur_faces=False, inplace=False):
         result = image if inplace else image.copy()
 
         for det in detections:
@@ -213,18 +205,14 @@ class YOLOv12FaceDetector:
                 if face_roi.size > 0:
                     blur_w = max(15, (x2 - x1) // 3 | 1)
                     blur_h = max(15, (y2 - y1) // 3 | 1)
-                    result[y1:y2, x1:x2] = cv2.GaussianBlur(
-                        face_roi, (blur_w, blur_h), 30
-                    )
+                    result[y1:y2, x1:x2] = cv2.GaussianBlur(face_roi, (blur_w, blur_h), 30)
 
             color = (0, 255, 0) if conf > 0.7 else (0, 165, 255)
             cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
 
             if show_conf:
                 label = f"Face {conf:.2f}"
-                label_size, _ = cv2.getTextSize(
-                    label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-                )
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
                 cv2.rectangle(
                     result,
                     (x1, y1 - label_size[1] - 10),
@@ -243,9 +231,7 @@ class YOLOv12FaceDetector:
                 )
 
         info = f"Faces: {len(detections)} (YOLOv12 ONNX INT8)"
-        cv2.putText(
-            result, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2
-        )
+        cv2.putText(result, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
         return result
 
     def get_face_crops(self, image, detections, padding=10):
