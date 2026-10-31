@@ -1,7 +1,7 @@
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import cv2
 import numpy as np
@@ -88,38 +88,50 @@ class YOLOv12FaceDetector:
         self._letterbox_buffer = np.full(
             (self.input_height, self.input_width, 3), 114, dtype=np.uint8
         )
-        self._blob_buffer = np.empty((1, 3, self.input_height, self.input_width), dtype=np.float32)
 
         dummy_input = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
         self.session.run(None, {self.input_name: dummy_input})
 
         self._initialized = True
 
-    def _preprocess(self, image):
-        """Preprocess Letterbox utilizing given cache (Zero-Copy / In-place)"""
+    def _preprocess(self, image: np.ndarray):
+        """Preprocess Letterbox utilizing given cache and Fused C++ blobFromImage"""
         img_h, img_w = image.shape[:2]
         scale = min(self.input_size / img_w, self.input_size / img_h)
         new_w, new_h = int(round(img_w * scale)), int(round(img_h * scale))
 
         pad_w = (self.input_size - new_w) / 2.0
         pad_h = (self.input_size - new_h) / 2.0
-        top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
-        left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
+        top = int(round(pad_h - 0.1))
+        left = int(round(pad_w - 0.1))
 
-        self._letterbox_buffer.fill(114)
+        if top > 0:
+            self._letterbox_buffer[:top, :] = 114
+        if top + new_h < self.input_height:
+            self._letterbox_buffer[top + new_h :, :] = 114
+        if left > 0:
+            self._letterbox_buffer[top : top + new_h, :left] = 114
+        if left + new_w < self.input_width:
+            self._letterbox_buffer[top : top + new_h, left + new_w :] = 114
 
-        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        self._letterbox_buffer[top : top + new_h, left : left + new_w] = resized
+        cv2.resize(
+            image,
+            (new_w, new_h),
+            dst=self._letterbox_buffer[top : top + new_h, left : left + new_w],
+            interpolation=cv2.INTER_LINEAR,
+        )
 
-        rgb = self._letterbox_buffer[:, :, ::-1].transpose(2, 0, 1)
-        np.multiply(rgb, 1.0 / 255.0, out=self._blob_buffer[0], casting="unsafe")
+        blob = cv2.dnn.blobFromImage(
+            self._letterbox_buffer,
+            scalefactor=1.0 / 255.0,
+            size=(self.input_width, self.input_height),
+            swapRB=True,
+            crop=False,
+        )
 
-        return self._blob_buffer, scale, left, top
+        return blob, scale, left, top
 
     def detect_faces(self, image, conf_threshold=0.32, iou_threshold=0.45):
-        """
-        Direct inference on ONNX Runtime and filter results by Vectorization + NMS.
-        """
         if image is None or image.size == 0:
             return []
 
@@ -180,8 +192,8 @@ class YOLOv12FaceDetector:
 
         return detections
 
-    def draw_faces(self, image, detections, show_conf=True, blur_faces=False):
-        result = image.copy()
+    def draw_faces(self, image, detections, show_conf=True, blur_faces=False, inplace=False):
+        result = image if inplace else image.copy()
 
         for det in detections:
             x1, y1 = det["x1"], det["y1"]
@@ -239,6 +251,75 @@ class YOLOv12FaceDetector:
         return crops
 
 
+def _compute_iou(boxA: Dict[str, Any], boxB: Dict[str, Any]) -> float:
+    xA = max(int(boxA["x1"]), int(boxB["x1"]))
+    yA = max(int(boxA["y1"]), int(boxB["y1"]))
+    xB = min(int(boxA["x2"]), int(boxB["x2"]))
+    yB = min(int(boxA["y2"]), int(boxB["y2"]))
+
+    inter_w = max(0, xB - xA)
+    inter_h = max(0, yB - yA)
+    inter_area = inter_w * inter_h
+    if inter_area == 0:
+        return 0.0
+
+    areaA = max(1, int(boxA["w"]) * int(boxA["h"]))
+    areaB = max(1, int(boxB["w"]) * int(boxB["h"]))
+    return float(inter_area) / float(areaA + areaB - inter_area)
+
+
+def _interpolate_detections(
+    dets_start: List[Dict[str, Any]],
+    dets_end: List[Dict[str, Any]],
+    alpha: float,
+    iou_match_thresh: float = 0.25,
+) -> List[Dict[str, Any]]:
+    if not dets_start:
+        return dets_end if alpha > 0.5 else []
+    if not dets_end:
+        return dets_start if alpha <= 0.5 else []
+
+    interpolated = []
+    used_end = set()
+
+    for d_start in dets_start:
+        best_iou = 0.0
+        best_idx = -1
+        for idx, d_end in enumerate(dets_end):
+            if idx in used_end:
+                continue
+            iou = _compute_iou(d_start, d_end)
+            if iou > best_iou:
+                best_iou = iou
+                best_idx = idx
+
+        if best_idx != -1 and best_iou >= iou_match_thresh:
+            used_end.add(best_idx)
+            d_end = dets_end[best_idx]
+            x1 = int(round((1.0 - alpha) * d_start["x1"] + alpha * d_end["x1"]))
+            y1 = int(round((1.0 - alpha) * d_start["y1"] + alpha * d_end["y1"]))
+            x2 = int(round((1.0 - alpha) * d_start["x2"] + alpha * d_end["x2"]))
+            y2 = int(round((1.0 - alpha) * d_start["y2"] + alpha * d_end["y2"]))
+            conf = (1.0 - alpha) * d_start["confidence"] + alpha * d_end["confidence"]
+            interpolated.append(
+                {
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2,
+                    "w": x2 - x1,
+                    "h": y2 - y1,
+                    "cx": (x1 + x2) // 2,
+                    "cy": (y1 + y2) // 2,
+                    "confidence": conf,
+                }
+            )
+        elif alpha <= 0.5:
+            interpolated.append(d_start)
+
+    return interpolated
+
+
 def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0.32):
     image = cv2.imread(str(image_path))
     if image is None:
@@ -246,7 +327,7 @@ def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0
 
     detector = YOLOv12FaceDetector(model_path)
     detections = detector.detect_faces(image, conf_threshold)
-    result = detector.draw_faces(image, detections)
+    result = detector.draw_faces(image, detections, inplace=True)
 
     if output_path:
         cv2.imwrite(str(output_path), result)
@@ -255,73 +336,133 @@ def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0
 
 
 def detect_from_video(
-    video_path, model_path, output_path=None, conf_threshold=0.32, frame_stride=2
+    video_path,
+    model_path,
+    output_path=None,
+    conf_threshold=0.32,
+    frame_stride=4,
+    max_dimension=1280,
 ):
+    """
+    Video Pipeline tối ưu hóa siêu tốc:
+    - Adaptive Frame Stride vs Linear Box Interpolation.
+    - Zero-temp-file streaming directly through FFmpeg Stdin Pipe.
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+
+    scale_factor = 1.0
+    if max(orig_w, orig_h) > max_dimension:
+        scale_factor = max_dimension / float(max(orig_w, orig_h))
+    out_w = int(round(orig_w * scale_factor)) // 2 * 2
+    out_h = int(round(orig_h * scale_factor)) // 2 * 2
+    need_resize = (out_w != orig_w) or (out_h != orig_h)
 
     detector = YOLOv12FaceDetector(model_path)
 
-    temp_output = str(output_path) + ".temp.mp4" if output_path else None
-    writer = (
-        cv2.VideoWriter(temp_output, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
-        if temp_output
-        else None
-    )
+    ffmpeg_proc = None
+    cv_writer = None
 
-    frame_idx = 0
-    cached_detections = []
+    if output_path:
+        if shutil.which("ffmpeg"):
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "rawvideo",
+                "-vcodec",
+                "rawvideo",
+                "-s",
+                f"{out_w}x{out_h}",
+                "-pix_fmt",
+                "bgr24",
+                "-r",
+                str(fps),
+                "-i",
+                "-",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "26",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+            ffmpeg_proc = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            cv_writer = cv2.VideoWriter(
+                str(output_path),
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                fps,
+                (out_w, out_h),
+            )
+
+    def _read_and_prepare():
+        ret, frm = cap.read()
+        if not ret:
+            return None
+        if need_resize:
+            frm = cv2.resize(frm, (out_w, out_h), interpolation=cv2.INTER_AREA)
+        return frm
+
+    def _write_frame(frm: np.ndarray):
+        if ffmpeg_proc and ffmpeg_proc.stdin:
+            ffmpeg_proc.stdin.write(frm.tobytes())
+        elif cv_writer:
+            cv_writer.write(frm)
+
+    prev_frame = _read_and_prepare()
+    if prev_frame is None:
+        cap.release()
+        return
+
+    prev_dets = detector.detect_faces(prev_frame, conf_threshold)
+    detector.draw_faces(prev_frame, prev_dets, inplace=True)
+    _write_frame(prev_frame)
 
     while True:
-        ret, frame = cap.read()
-        if not ret:
+        chunk_frames = []
+        for _ in range(frame_stride):
+            frm = _read_and_prepare()
+            if frm is None:
+                break
+            chunk_frames.append(frm)
+
+        if not chunk_frames:
             break
 
-        if frame_idx % frame_stride == 0:
-            cached_detections = detector.detect_faces(frame, conf_threshold)
+        last_frame = chunk_frames[-1]
+        next_dets = detector.detect_faces(last_frame, conf_threshold)
 
-        result = detector.draw_faces(frame, cached_detections)
-        if writer:
-            writer.write(result)
+        chunk_len = len(chunk_frames)
+        for i in range(chunk_len - 1):
+            alpha = float(i + 1) / float(chunk_len)
+            interp_dets = _interpolate_detections(prev_dets, next_dets, alpha)
+            detector.draw_faces(chunk_frames[i], interp_dets, inplace=True)
+            _write_frame(chunk_frames[i])
 
-        frame_idx += 1
+        detector.draw_faces(last_frame, next_dets, inplace=True)
+        _write_frame(last_frame)
+
+        prev_dets = next_dets
 
     cap.release()
-    if writer:
-        writer.release()
-
-    if output_path and temp_output and Path(temp_output).exists():
-        if shutil.which("ffmpeg"):
-            try:
-                subprocess.run(
-                    [
-                        "ffmpeg",
-                        "-y",
-                        "-i",
-                        temp_output,
-                        "-c:v",
-                        "libx264",
-                        "-preset",
-                        "fast",
-                        "-crf",
-                        "23",
-                        "-pix_fmt",
-                        "yuv420p",
-                        "-movflags",
-                        "+faststart",
-                        str(output_path),
-                    ],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                Path(temp_output).unlink(missing_ok=True)
-            except Exception:
-                Path(temp_output).replace(output_path)
-        else:
-            Path(temp_output).replace(output_path)
+    if ffmpeg_proc and ffmpeg_proc.stdin:
+        ffmpeg_proc.stdin.close()
+        ffmpeg_proc.wait()
+    if cv_writer:
+        cv_writer.release()
