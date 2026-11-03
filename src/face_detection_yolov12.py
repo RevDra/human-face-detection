@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -85,51 +86,43 @@ class YOLOv12FaceDetector:
         self.input_width = input_shape[3] if isinstance(input_shape[3], int) else 640
 
         self.input_size = self.input_height
-        self._letterbox_buffer = np.full(
-            (self.input_height, self.input_width, 3), 114, dtype=np.uint8
-        )
+        self._thread_local = threading.local()
+        self._blob_buffer = np.empty((1, 3, self.input_height, self.input_width), dtype=np.float32)
 
         dummy_input = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
         self.session.run(None, {self.input_name: dummy_input})
 
         self._initialized = True
 
+    def _get_letterbox_buffer(self) -> np.ndarray:
+        """Take own buffer of each thread, initialize if none."""
+        if not hasattr(self._thread_local, "letterbox_buffer"):
+            self._thread_local.letterbox_buffer = np.full(
+                (self.input_height, self.input_width, 3), 114, dtype=np.uint8
+            )
+        return self._thread_local.letterbox_buffer
+        
     def _preprocess(self, image: np.ndarray):
         """Preprocess Letterbox utilizing given cache and Fused C++ blobFromImage"""
+        buffer = self._get_letterbox_buffer()
         img_h, img_w = image.shape[:2]
         scale = min(self.input_size / img_w, self.input_size / img_h)
         new_w, new_h = int(round(img_w * scale)), int(round(img_h * scale))
 
         pad_w = (self.input_size - new_w) / 2.0
         pad_h = (self.input_size - new_h) / 2.0
-        top = int(round(pad_h - 0.1))
-        left = int(round(pad_w - 0.1))
+        top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
+        left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
 
-        if top > 0:
-            self._letterbox_buffer[:top, :] = 114
-        if top + new_h < self.input_height:
-            self._letterbox_buffer[top + new_h :, :] = 114
-        if left > 0:
-            self._letterbox_buffer[top : top + new_h, :left] = 114
-        if left + new_w < self.input_width:
-            self._letterbox_buffer[top : top + new_h, left + new_w :] = 114
+        buffer.fill(114)
 
-        cv2.resize(
-            image,
-            (new_w, new_h),
-            dst=self._letterbox_buffer[top : top + new_h, left : left + new_w],
-            interpolation=cv2.INTER_LINEAR,
-        )
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        buffer[top : top + new_h, left : left + new_w] = resized
 
-        blob = cv2.dnn.blobFromImage(
-            self._letterbox_buffer,
-            scalefactor=1.0 / 255.0,
-            size=(self.input_width, self.input_height),
-            swapRB=True,
-            crop=False,
-        )
+        rgb = buffer[:, :, ::-1].transpose(2, 0, 1)
+        np.multiply(rgb, 1.0 / 255.0, out=self._blob_buffer[0], casting="unsafe")
 
-        return blob, scale, left, top
+        return self._blob_buffer, scale, left, top
 
     def detect_faces(self, image, conf_threshold=0.32, iou_threshold=0.45):
         if image is None or image.size == 0:
