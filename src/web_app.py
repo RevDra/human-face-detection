@@ -5,6 +5,7 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 """
 
 import os
+import time
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
@@ -164,6 +165,30 @@ def is_video(filename):
     return ext in {"mp4", "avi", "mov", "mkv"}
 
 
+def cleanup_old_files(directory: Path, max_age_seconds: int = 1800) -> None:
+    """Automatically clean files (jpg, mp4,...) that exist > 30 mins on the container."""
+    if not directory.exists():
+        return
+    now = time.time()
+    for file_path in directory.iterdir():
+        if file_path.is_file():
+            if file_path.suffix.lower() in {
+                ".mp4",
+                ".avi",
+                ".mov",
+                ".mkv",
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+            }:
+                try:
+                    if now - file_path.stat().st_mtime > max_age_seconds:
+                        file_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+
 @app.route("/")
 def index():
     """Main page"""
@@ -174,6 +199,7 @@ def index():
 def detect_image():
     """Detect faces in uploaded image or live webcam frame"""
     try:
+        cleanup_old_files(UPLOAD_FOLDER)
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
@@ -187,8 +213,6 @@ def detect_image():
         # Get parameters
         model = request.form.get("model", "yolov12s-face-int8.onnx")
         blur = request.form.get("blur") == "true"
-
-        # Nhận diện xem request có phải đến từ luồng Webcam hay không
         is_webcam = request.form.get("mode") == "webcam" or "webcam" in file.filename.lower()
 
         if not model.endswith(".onnx"):
@@ -198,10 +222,8 @@ def detect_image():
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
             model = "yolov12n-face-int8.onnx" if is_webcam else "yolov12s-face-int8.onnx"
 
-        # Lấy instance detector (đã được cache ở RAM qua Singleton)
         detector = get_detector(model)
 
-        # Giải mã ảnh trực tiếp từ bytes tốc độ cao
         image_data = file.read()
         image = decode_image_fast(image_data)
         if image is None:
@@ -210,7 +232,7 @@ def detect_image():
         img_h, img_w = image.shape[:2]
         detections = detector.detect_faces(image, conf_threshold=0.32)
 
-        # --- NHÁNH 1: WEBCAM (CHỈ TRẢ VỀ TỌA ĐỘ - ZERO SERVER-SIDE RENDERING) ---
+        # --- BRANCH 1: WEBCAM (LOCATION ONLY - ZERO SERVER-SIDE RENDERING) ---
         if is_webcam:
             return jsonify(
                 {
@@ -236,7 +258,7 @@ def detect_image():
                 }
             )
 
-        # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
+        # --- BRANCH 2: STATIC UPLOAD IMAGES ---
         if blur:
             result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
         else:
@@ -289,6 +311,7 @@ def detect_image():
 def detect_video():
     """Detect faces in uploaded video"""
     try:
+        cleanup_old_files(UPLOAD_FOLDER)
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
