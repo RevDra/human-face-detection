@@ -5,6 +5,7 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 """
 
 import os
+import time
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
@@ -163,17 +164,30 @@ def is_video(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+def cleanup_old_files(directory: Path, max_age_seconds: int = 1800) -> None:
+    """Automatically clean files (jpg, mp4,...) that exist > 30 mins on the container."""
+    if not directory.exists():
+        return
+    now = time.time()
+    for file_path in directory.iterdir():
+        if file_path.is_file():
+            if file_path.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv", ".jpg", ".jpeg", ".png", ".webp"}:
+                try:
+                    if now - file_path.stat().st_mtime > max_age_seconds:
+                        file_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 @app.route("/")
 def index():
     """Main page"""
     return render_template("index.html")
 
-
 @app.route("/api/detect-image", methods=["POST"])
 def detect_image():
     """Detect faces in uploaded image or live webcam frame"""
     try:
+        cleanup_old_files(UPLOAD_FOLDER)
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
@@ -187,8 +201,6 @@ def detect_image():
         # Get parameters
         model = request.form.get("model", "yolov12s-face-int8.onnx")
         blur = request.form.get("blur") == "true"
-
-        # Nhận diện xem request có phải đến từ luồng Webcam hay không
         is_webcam = request.form.get("mode") == "webcam" or "webcam" in file.filename.lower()
 
         if not model.endswith(".onnx"):
@@ -198,10 +210,8 @@ def detect_image():
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
             model = "yolov12n-face-int8.onnx" if is_webcam else "yolov12s-face-int8.onnx"
 
-        # Lấy instance detector (đã được cache ở RAM qua Singleton)
         detector = get_detector(model)
 
-        # Giải mã ảnh trực tiếp từ bytes tốc độ cao
         image_data = file.read()
         image = decode_image_fast(image_data)
         if image is None:
@@ -210,7 +220,7 @@ def detect_image():
         img_h, img_w = image.shape[:2]
         detections = detector.detect_faces(image, conf_threshold=0.32)
 
-        # --- NHÁNH 1: WEBCAM (CHỈ TRẢ VỀ TỌA ĐỘ - ZERO SERVER-SIDE RENDERING) ---
+        # --- BRANCH 1: WEBCAM (LOCATION ONLY - ZERO SERVER-SIDE RENDERING) ---
         if is_webcam:
             return jsonify(
                 {
@@ -236,7 +246,7 @@ def detect_image():
                 }
             )
 
-        # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
+        # --- BRANCH 2: STATIC UPLOAD IMAGES ---
         if blur:
             result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
         else:
@@ -283,12 +293,12 @@ def detect_image():
         logging.exception("Error during image detection")
         return jsonify({"error": "Internal server error during image detection"}), 500
 
-
 @app.route("/api/detect-video", methods=["POST"])
 @limiter.limit("5 per hour")
 def detect_video():
     """Detect faces in uploaded video"""
     try:
+        cleanup_old_files(UPLOAD_FOLDER)
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
@@ -339,7 +349,6 @@ def detect_video():
         app.logger.exception("Error while processing video detection request")
         return jsonify({"error": "Internal server error"}), 500
 
-
 @app.route("/api/download/<filename>", methods=["GET"])
 def download_file(filename):
     try:
@@ -358,7 +367,6 @@ def download_file(filename):
     except Exception:
         app.logger.exception("Error while processing download request for %s", filename)
         return jsonify({"error": "Internal server error"}), 500
-
 
 @app.route("/api/models", methods=["GET"])
 def get_models():
@@ -401,7 +409,6 @@ def get_models():
 
     return jsonify(sorted_available)
 
-
 @app.route("/api/feedback", methods=["POST"])
 @limiter.limit("5 per minute")
 def submit_feedback():
@@ -421,24 +428,20 @@ def submit_feedback():
         app.logger.error(f"DB Error: {e}")
         return jsonify({"error": "Database error"}), 500
 
-
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "service": "Face Detection ONNX API"})
-
 
 @app.errorhandler(413)
 def request_entity_too_large(error):
     """Handle file size exceeded"""
     return jsonify({"error": "File too large. Maximum 500MB allowed"}), 413
 
-
 @app.errorhandler(500)
 def internal_error(error):
     """Handle internal server error"""
     return jsonify({"error": "Internal server error"}), 500
-
 
 @app.errorhandler(RateLimitExceeded)
 def handle_rate_limit_error(e):
@@ -453,7 +456,6 @@ def handle_rate_limit_error(e):
         ),
         429,
     )
-
 
 if __name__ == "__main__":
     print("\n" + "=" * 70)
