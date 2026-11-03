@@ -166,12 +166,13 @@ def is_video(filename):
 
 
 def cleanup_old_files(directory: Path, max_age_seconds: int = 1800) -> None:
-    """Automatically clean files (jpg, mp4,...) that exist > 30 mins on the container."""
+    """Xóa tự động các file tạm (.jpg, .mp4,...) tồn tại quá 30 phút trên ổ cứng container."""
     if not directory.exists():
         return
     now = time.time()
     for file_path in directory.iterdir():
         if file_path.is_file():
+            # Chỉ xóa các định dạng file upload/output thông dụng
             if file_path.suffix.lower() in {
                 ".mp4",
                 ".avi",
@@ -213,6 +214,8 @@ def detect_image():
         # Get parameters
         model = request.form.get("model", "yolov12s-face-int8.onnx")
         blur = request.form.get("blur") == "true"
+
+        # Nhận diện xem request có phải đến từ luồng Webcam hay không
         is_webcam = request.form.get("mode") == "webcam" or "webcam" in file.filename.lower()
 
         if not model.endswith(".onnx"):
@@ -222,8 +225,10 @@ def detect_image():
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
             model = "yolov12n-face-int8.onnx" if is_webcam else "yolov12s-face-int8.onnx"
 
+        # Lấy instance detector (đã được cache ở RAM qua Singleton)
         detector = get_detector(model)
 
+        # Giải mã ảnh trực tiếp từ bytes tốc độ cao
         image_data = file.read()
         image = decode_image_fast(image_data)
         if image is None:
@@ -232,7 +237,7 @@ def detect_image():
         img_h, img_w = image.shape[:2]
         detections = detector.detect_faces(image, conf_threshold=0.32)
 
-        # --- BRANCH 1: WEBCAM (LOCATION ONLY - ZERO SERVER-SIDE RENDERING) ---
+        # --- NHÁNH 1: WEBCAM (CHỈ TRẢ VỀ TỌA ĐỘ - ZERO SERVER-SIDE RENDERING) ---
         if is_webcam:
             return jsonify(
                 {
@@ -258,7 +263,7 @@ def detect_image():
                 }
             )
 
-        # --- BRANCH 2: STATIC UPLOAD IMAGES ---
+        # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         if blur:
             result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
         else:
@@ -324,6 +329,7 @@ def detect_video():
 
         # Get model selection
         raw_model = request.form.get("model", "yolov12n-face-int8.onnx")
+        blur = request.form.get("blur") == "true"
         model = Path(raw_model).name
         if model.endswith(".pt"):
             model = model.replace(".pt", ".onnx")
@@ -346,6 +352,7 @@ def detect_video():
             model_path=model,
             output_path=str(output_path),
             conf_threshold=0.32,
+            blur_faces=blur,
         )
 
         # Return file info

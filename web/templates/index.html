@@ -308,13 +308,20 @@
                 
                 <div id="videoMessage" class="message"></div>
 
-                <div class="form-group">
-                    <label for="videoModel">🤖 Select Model:</label>
-                    <select id="videoModel">
-                        <option>Loading models...</option>
-                    </select>
+                <div class="form-group" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 2; min-width: 200px;">
+                        <label for="videoModel">🤖 Select Model:</label>
+                        <select id="videoModel">
+                              <option>Loading models...</option>
+                        </select>
+                    </div>
+    <!-- Thêm checkbox Privacy Mode cho Video -->
+                    <div style="flex: 1; min-width: 220px; display: flex; align-items: center; gap: 12px; margin-top: 25px; padding: 10px; background: rgba(102, 126, 234, 0.1); border-radius: 8px;">
+                        <input type="checkbox" id="videoBlurFaces" style="width: 22px; height: 22px; cursor: pointer;">
+                        <label for="videoBlurFaces" style="margin-bottom: 0; cursor: pointer; font-weight: 600;">🕵️ Privacy Mode (Blur Faces)</label>
+                    </div>
                 </div>
-
+                  
                 <div class="form-group">
                     <label>📁 Upload Video:</label>
                     <div class="upload-area" id="videoUploadArea">
@@ -881,11 +888,13 @@
     async function detectVideo() {
         const file = document.getElementById('videoFile').files[0];
         const model = document.getElementById('videoModel').value;
+        const blur = document.getElementById('videoBlurFaces').checked;
         if (!file) { showMessage('videoMessage', 'Please select a video', 'error'); return; }
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('model', model);
+        formData.append('blur', blur);
 
         document.getElementById('detectVideoBtn').disabled = true;
         document.getElementById('videoProgress').style.display = 'block';
