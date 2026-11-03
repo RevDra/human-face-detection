@@ -101,7 +101,7 @@ class YOLOv12FaceDetector:
                 (self.input_height, self.input_width, 3), 114, dtype=np.uint8
             )
         return self._thread_local.letterbox_buffer
-        
+
     def _preprocess(self, image: np.ndarray):
         """Preprocess Letterbox utilizing given cache and Fused C++ blobFromImage"""
         buffer = self._get_letterbox_buffer()
@@ -335,7 +335,7 @@ def detect_from_video(
     conf_threshold=0.32,
     frame_stride=4,
     max_dimension=1280,
-    blur_faces=False
+    blur_faces=False,
 ):
     """
     - Adaptive Frame Stride vs Linear Box Interpolation.
@@ -403,7 +403,7 @@ def detect_from_video(
                 fps,
                 (out_w, out_h),
             )
-    
+
     def _read_and_prepare():
         ret, frm = cap.read()
         if not ret:
