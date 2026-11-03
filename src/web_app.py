@@ -164,6 +164,7 @@ def is_video(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+
 def cleanup_old_files(directory: Path, max_age_seconds: int = 1800) -> None:
     """Xóa tự động các file tạm (.jpg, .mp4,...) tồn tại quá 30 phút trên ổ cứng container."""
     if not directory.exists():
@@ -172,12 +173,22 @@ def cleanup_old_files(directory: Path, max_age_seconds: int = 1800) -> None:
     for file_path in directory.iterdir():
         if file_path.is_file():
             # Chỉ xóa các định dạng file upload/output thông dụng
-            if file_path.suffix.lower() in {".mp4", ".avi", ".mov", ".mkv", ".jpg", ".jpeg", ".png", ".webp"}:
+            if file_path.suffix.lower() in {
+                ".mp4",
+                ".avi",
+                ".mov",
+                ".mkv",
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+            }:
                 try:
                     if now - file_path.stat().st_mtime > max_age_seconds:
                         file_path.unlink(missing_ok=True)
                 except OSError:
                     pass
+
 
 @app.route("/")
 def index():
@@ -341,7 +352,7 @@ def detect_video():
             model_path=model,
             output_path=str(output_path),
             conf_threshold=0.32,
-            blur_faces=blur
+            blur_faces=blur,
         )
 
         # Return file info
