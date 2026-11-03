@@ -101,7 +101,7 @@ class YOLOv12FaceDetector:
                 (self.input_height, self.input_width, 3), 114, dtype=np.uint8
             )
         return self._thread_local.letterbox_buffer
-        
+
     def _preprocess(self, image: np.ndarray):
         """Preprocess Letterbox utilizing given cache and Fused C++ blobFromImage"""
         buffer = self._get_letterbox_buffer()
