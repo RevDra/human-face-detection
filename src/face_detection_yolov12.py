@@ -95,13 +95,13 @@ class YOLOv12FaceDetector:
         self._initialized = True
 
     def _get_letterbox_buffer(self) -> np.ndarray:
-        """Take own buffer of each thread, initialize if none."""
+        """Lấy buffer riêng của từng thread, khởi tạo nếu thread đó chưa có."""
         if not hasattr(self._thread_local, "letterbox_buffer"):
             self._thread_local.letterbox_buffer = np.full(
                 (self.input_height, self.input_width, 3), 114, dtype=np.uint8
             )
         return self._thread_local.letterbox_buffer
-
+        
     def _preprocess(self, image: np.ndarray):
         """Preprocess Letterbox utilizing given cache and Fused C++ blobFromImage"""
         buffer = self._get_letterbox_buffer()
@@ -335,9 +335,9 @@ def detect_from_video(
     conf_threshold=0.32,
     frame_stride=4,
     max_dimension=1280,
+    blur_faces=False
 ):
     """
-    Video Pipeline tối ưu hóa siêu tốc:
     - Adaptive Frame Stride vs Linear Box Interpolation.
     - Zero-temp-file streaming directly through FFmpeg Stdin Pipe.
     """
@@ -403,7 +403,7 @@ def detect_from_video(
                 fps,
                 (out_w, out_h),
             )
-
+    
     def _read_and_prepare():
         ret, frm = cap.read()
         if not ret:
@@ -424,7 +424,7 @@ def detect_from_video(
         return
 
     prev_dets = detector.detect_faces(prev_frame, conf_threshold)
-    detector.draw_faces(prev_frame, prev_dets, inplace=True)
+    detector.draw_faces(prev_frame, prev_dets, blur_faces=blur_faces, inplace=True)
     _write_frame(prev_frame)
 
     while True:
@@ -445,10 +445,10 @@ def detect_from_video(
         for i in range(chunk_len - 1):
             alpha = float(i + 1) / float(chunk_len)
             interp_dets = _interpolate_detections(prev_dets, next_dets, alpha)
-            detector.draw_faces(chunk_frames[i], interp_dets, inplace=True)
+            detector.draw_faces(chunk_frames[i], interp_dets, blur_faces=blur_faces, inplace=True)
             _write_frame(chunk_frames[i])
 
-        detector.draw_faces(last_frame, next_dets, inplace=True)
+        detector.draw_faces(last_frame, next_dets, blur_faces=blur_faces, inplace=True)
         _write_frame(last_frame)
 
         prev_dets = next_dets
