@@ -104,7 +104,7 @@ class YOLOv12FaceDetector:
                 (1, 3, self.input_height, self.input_width), dtype=np.float32
             )
         return self._thread_local.letterbox_buffer, self._thread_local.blob_buffer
-        
+
     def _preprocess(self, image: np.ndarray):
         """Preprocess Letterbox utilizing 100% thread-safe zero-copy buffers."""
         buffer, blob_buffer = self._get_thread_buffers()
@@ -409,7 +409,7 @@ def detect_from_video(
                 fps,
                 (out_w, out_h),
             )
-    
+
     def _read_and_prepare():
         ret, frm = cap.read()
         if not ret:
@@ -431,7 +431,9 @@ def detect_from_video(
 
     show_conf = not blur_faces
     prev_dets = detector.detect_faces(prev_frame, conf_threshold)
-    detector.draw_faces(prev_frame, prev_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True)
+    detector.draw_faces(
+        prev_frame, prev_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True
+    )
     _write_frame(prev_frame)
 
     while True:
@@ -452,10 +454,18 @@ def detect_from_video(
         for i in range(chunk_len - 1):
             alpha = float(i + 1) / float(chunk_len)
             interp_dets = _interpolate_detections(prev_dets, next_dets, alpha)
-            detector.draw_faces(chunk_frames[i], interp_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True)
+            detector.draw_faces(
+                chunk_frames[i],
+                interp_dets,
+                show_conf=show_conf,
+                blur_faces=blur_faces,
+                inplace=True,
+            )
             _write_frame(chunk_frames[i])
 
-        detector.draw_faces(last_frame, next_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True)
+        detector.draw_faces(
+            last_frame, next_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True
+        )
         _write_frame(last_frame)
 
         prev_dets = next_dets
