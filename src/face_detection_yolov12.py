@@ -94,35 +94,41 @@ class YOLOv12FaceDetector:
 
         self._initialized = True
 
-    def _get_letterbox_buffer(self) -> np.ndarray:
-        """Lấy buffer riêng của từng thread, khởi tạo nếu thread đó chưa có."""
+    def _get_thread_buffers(self) -> tuple[np.ndarray, np.ndarray]:
+        """Lấy bộ đệm letterbox và blob riêng biệt cho từng luồng thực thi."""
         if not hasattr(self._thread_local, "letterbox_buffer"):
             self._thread_local.letterbox_buffer = np.full(
                 (self.input_height, self.input_width, 3), 114, dtype=np.uint8
             )
-        return self._thread_local.letterbox_buffer
-
+            self._thread_local.blob_buffer = np.empty(
+                (1, 3, self.input_height, self.input_width), dtype=np.float32
+            )
+        return self._thread_local.letterbox_buffer, self._thread_local.blob_buffer
+        
     def _preprocess(self, image: np.ndarray):
-        """Preprocess Letterbox utilizing given cache and Fused C++ blobFromImage"""
-        buffer = self._get_letterbox_buffer()
+        """Preprocess Letterbox utilizing 100% thread-safe zero-copy buffers."""
+        buffer, blob_buffer = self._get_thread_buffers()
         img_h, img_w = image.shape[:2]
         scale = min(self.input_size / img_w, self.input_size / img_h)
         new_w, new_h = int(round(img_w * scale)), int(round(img_h * scale))
 
         pad_w = (self.input_size - new_w) / 2.0
         pad_h = (self.input_size - new_h) / 2.0
-        top, bottom = int(round(pad_h - 0.1)), int(round(pad_h + 0.1))
-        left, right = int(round(pad_w - 0.1)), int(round(pad_w + 0.1))
+        top = int(round(pad_h - 0.1))
+        left = int(round(pad_w - 0.1))
 
         buffer.fill(114)
-
-        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        buffer[top : top + new_h, left : left + new_w] = resized
+        cv2.resize(
+            image,
+            (new_w, new_h),
+            dst=buffer[top : top + new_h, left : left + new_w],
+            interpolation=cv2.INTER_LINEAR,
+        )
 
         rgb = buffer[:, :, ::-1].transpose(2, 0, 1)
-        np.multiply(rgb, 1.0 / 255.0, out=self._blob_buffer[0], casting="unsafe")
+        np.multiply(rgb, 1.0 / 255.0, out=blob_buffer[0], casting="unsafe")
 
-        return self._blob_buffer, scale, left, top
+        return blob_buffer, scale, left, top
 
     def detect_faces(self, image, conf_threshold=0.32, iou_threshold=0.45):
         if image is None or image.size == 0:
@@ -199,29 +205,29 @@ class YOLOv12FaceDetector:
                     blur_w = max(15, (x2 - x1) // 3 | 1)
                     blur_h = max(15, (y2 - y1) // 3 | 1)
                     result[y1:y2, x1:x2] = cv2.GaussianBlur(face_roi, (blur_w, blur_h), 30)
+            else:
+                color = (0, 255, 0) if conf > 0.7 else (0, 165, 255)
+                cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
 
-            color = (0, 255, 0) if conf > 0.7 else (0, 165, 255)
-            cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
-
-            if show_conf:
-                label = f"Face {conf:.2f}"
-                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-                cv2.rectangle(
-                    result,
-                    (x1, y1 - label_size[1] - 10),
-                    (x1 + label_size[0], y1),
-                    color,
-                    -1,
-                )
-                cv2.putText(
-                    result,
-                    label,
-                    (x1, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (255, 255, 255),
-                    2,
-                )
+                if show_conf:
+                    label = f"Face {conf:.2f}"
+                    label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                    cv2.rectangle(
+                        result,
+                        (x1, y1 - label_size[1] - 10),
+                        (x1 + label_size[0], y1),
+                        color,
+                        -1,
+                    )
+                    cv2.putText(
+                        result,
+                        label,
+                        (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        2,
+                    )
 
         info = f"Faces: {len(detections)} (YOLOv12 ONNX INT8)"
         cv2.putText(result, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
@@ -403,7 +409,7 @@ def detect_from_video(
                 fps,
                 (out_w, out_h),
             )
-
+    
     def _read_and_prepare():
         ret, frm = cap.read()
         if not ret:
@@ -423,8 +429,9 @@ def detect_from_video(
         cap.release()
         return
 
+    show_conf = not blur_faces
     prev_dets = detector.detect_faces(prev_frame, conf_threshold)
-    detector.draw_faces(prev_frame, prev_dets, blur_faces=blur_faces, inplace=True)
+    detector.draw_faces(prev_frame, prev_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True)
     _write_frame(prev_frame)
 
     while True:
@@ -445,10 +452,10 @@ def detect_from_video(
         for i in range(chunk_len - 1):
             alpha = float(i + 1) / float(chunk_len)
             interp_dets = _interpolate_detections(prev_dets, next_dets, alpha)
-            detector.draw_faces(chunk_frames[i], interp_dets, blur_faces=blur_faces, inplace=True)
+            detector.draw_faces(chunk_frames[i], interp_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True)
             _write_frame(chunk_frames[i])
 
-        detector.draw_faces(last_frame, next_dets, blur_faces=blur_faces, inplace=True)
+        detector.draw_faces(last_frame, next_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True)
         _write_frame(last_frame)
 
         prev_dets = next_dets
