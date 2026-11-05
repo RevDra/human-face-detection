@@ -6,6 +6,8 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 
 import os
 import time
+import threading
+import uuid
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
@@ -164,31 +166,32 @@ def is_video(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+_last_cleanup_time = 0.0
+_cleanup_lock = threading.Lock()
 
-def cleanup_old_files(directory: Path, max_age_seconds: int = 1800) -> None:
-    """Xóa tự động các file tạm (.jpg, .mp4,...) tồn tại quá 30 phút trên ổ cứng container."""
+def cleanup_old_files(directory: Path, max_age_seconds: int = 1800, min_interval: int = 300) -> None:
+    """Chỉ quét ổ cứng tối đa 5 phút (300s) một lần để tránh nghẽn I/O."""
+    global _last_cleanup_time
+    now = time.time()
+    if now - _last_cleanup_time < min_interval:
+        return
+
+    with _cleanup_lock:
+        if now - _last_cleanup_time < min_interval:
+            return
+        _last_cleanup_time = now
+
     if not directory.exists():
         return
-    now = time.time()
-    for file_path in directory.iterdir():
-        if file_path.is_file():
-            # Chỉ xóa các định dạng file upload/output thông dụng
-            if file_path.suffix.lower() in {
-                ".mp4",
-                ".avi",
-                ".mov",
-                ".mkv",
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-            }:
-                try:
-                    if now - file_path.stat().st_mtime > max_age_seconds:
-                        file_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
+    valid_exts = {".mp4", ".avi", ".mov", ".mkv", ".jpg", ".jpeg", ".png", ".webp"}
+    for file_path in directory.iterdir():
+        if file_path.is_file() and file_path.suffix.lower() in valid_exts:
+            try:
+                if now - file_path.stat().st_mtime > max_age_seconds:
+                    file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 @app.route("/")
 def index():
@@ -264,10 +267,9 @@ def detect_image():
             )
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
-        if blur:
-            result_image = detector.draw_faces(image, detections, show_conf=False, blur_faces=blur)
-        else:
-            result_image = detector.draw_faces(image, detections, show_conf=True, blur_faces=blur)
+        result_image = detector.draw_faces(
+          image, detections, show_conf=not blur, blur_faces=blur, inplace=True
+      )
 
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
@@ -342,18 +344,21 @@ def detect_video():
 
         # Save uploaded file
         filename = secure_filename(file.filename)
-        input_path = UPLOAD_FOLDER / f"input_{filename}"
-        output_path = UPLOAD_FOLDER / f"output_{filename}"
+        input_path = UPLOAD_FOLDER / f"input_{uuid.uuid4().hex[:8]}_{filename}"
+        output_path = UPLOAD_FOLDER / f"output_{uuid.uuid4().hex[:8]}_{filename}"
         file.save(input_path)
 
         # Detect faces in video
-        detect_from_video(
-            video_path=str(input_path),
-            model_path=model,
-            output_path=str(output_path),
-            conf_threshold=0.32,
-            blur_faces=blur,
-        )
+        try:
+          detect_from_video(
+              video_path=str(input_path),
+              model_path=model,
+              output_path=str(output_path),
+              conf_threshold=0.32,
+              blur_faces=blur,
+          )
+        finally:
+          input_path.unlink(missing_ok=True)
 
         # Return file info
         response = {
