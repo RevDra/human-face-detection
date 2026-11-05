@@ -5,8 +5,8 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 """
 
 import os
-import time
 import threading
+import time
 import uuid
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -166,10 +166,14 @@ def is_video(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+
 _last_cleanup_time = 0.0
 _cleanup_lock = threading.Lock()
 
-def cleanup_old_files(directory: Path, max_age_seconds: int = 1800, min_interval: int = 300) -> None:
+
+def cleanup_old_files(
+    directory: Path, max_age_seconds: int = 1800, min_interval: int = 300
+) -> None:
     """Chỉ quét ổ cứng tối đa 5 phút (300s) một lần để tránh nghẽn I/O."""
     global _last_cleanup_time
     now = time.time()
@@ -192,6 +196,7 @@ def cleanup_old_files(directory: Path, max_age_seconds: int = 1800, min_interval
                     file_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
 
 @app.route("/")
 def index():
@@ -268,8 +273,8 @@ def detect_image():
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         result_image = detector.draw_faces(
-          image, detections, show_conf=not blur, blur_faces=blur, inplace=True
-      )
+            image, detections, show_conf=not blur, blur_faces=blur, inplace=True
+        )
 
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
@@ -350,15 +355,15 @@ def detect_video():
 
         # Detect faces in video
         try:
-          detect_from_video(
-              video_path=str(input_path),
-              model_path=model,
-              output_path=str(output_path),
-              conf_threshold=0.32,
-              blur_faces=blur,
-          )
+            detect_from_video(
+                video_path=str(input_path),
+                model_path=model,
+                output_path=str(output_path),
+                conf_threshold=0.32,
+                blur_faces=blur,
+            )
         finally:
-          input_path.unlink(missing_ok=True)
+            input_path.unlink(missing_ok=True)
 
         # Return file info
         response = {
