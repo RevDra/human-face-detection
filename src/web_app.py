@@ -15,6 +15,7 @@ os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
 
 import base64
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, cast
@@ -198,6 +199,96 @@ def cleanup_old_files(
                 pass
 
 
+VIDEO_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+VIDEO_JOBS: dict[str, dict] = {}
+VIDEO_JOBS_LOCK = threading.Lock()
+
+
+def cleanup_old_jobs(max_age_seconds: int = 1800) -> None:
+    now = time.time()
+    with VIDEO_JOBS_LOCK:
+        expired_ids = [
+            jid
+            for jid, info in VIDEO_JOBS.items()
+            if now - info.get("created_at", now) > max_age_seconds
+        ]
+        for jid in expired_ids:
+            VIDEO_JOBS.pop(jid, None)
+
+
+def _run_video_job(
+    job_id: str, input_path: Path, output_path: Path, model: str, blur: bool
+) -> None:
+    start_time = time.time()
+    with VIDEO_JOBS_LOCK:
+        if job_id in VIDEO_JOBS:
+            VIDEO_JOBS[job_id]["status"] = "processing"
+            VIDEO_JOBS[job_id]["started_at"] = start_time
+
+    def _on_progress(processed: int, total: int) -> None:
+        elapsed = max(0.001, time.time() - start_time)
+        fps = round(processed / elapsed, 1)
+        if total > 0:
+            pct = min(99, int((processed / total) * 100))
+            remaining_frames = max(0, total - processed)
+            eta_seconds = int(remaining_frames / max(0.1, fps))
+        else:
+            pct = 50
+            eta_seconds = 0
+
+        with VIDEO_JOBS_LOCK:
+            if job_id in VIDEO_JOBS:
+                VIDEO_JOBS[job_id].update(
+                    {
+                        "progress": pct,
+                        "processed_frames": processed,
+                        "total_frames": total,
+                        "fps": fps,
+                        "eta_seconds": eta_seconds,
+                    }
+                )
+
+    try:
+        detect_from_video(
+            video_path=str(input_path),
+            model_path=model,
+            output_path=str(output_path),
+            conf_threshold=0.32,
+            blur_faces=blur,
+            progress_callback=_on_progress,
+        )
+
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            raise RuntimeError("Output video file was not generated properly.")
+
+        total_elapsed = round(time.time() - start_time, 1)
+        with VIDEO_JOBS_LOCK:
+            if job_id in VIDEO_JOBS:
+                VIDEO_JOBS[job_id].update(
+                    {
+                        "status": "completed",
+                        "progress": 100,
+                        "elapsed_seconds": total_elapsed,
+                        "eta_seconds": 0,
+                        "message": "Video processing complete",
+                        "output_file": output_path.name,
+                        "download_url": f"/api/download/{output_path.name}",
+                    }
+                )
+    except Exception as exc:
+        app.logger.exception(f"Error in background video job {job_id}")
+        with VIDEO_JOBS_LOCK:
+            if job_id in VIDEO_JOBS:
+                VIDEO_JOBS[job_id].update(
+                    {
+                        "status": "failed",
+                        "error": str(exc) or "Failed to process video",
+                    }
+                )
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
 @app.route("/")
 def index():
     """Main page"""
@@ -324,6 +415,7 @@ def detect_video():
     """Detect faces in uploaded video"""
     try:
         cleanup_old_files(UPLOAD_FOLDER)
+        cleanup_old_jobs()
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
@@ -347,37 +439,50 @@ def detect_video():
             app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Nano INT8).")
             model = "yolov12n-face-int8.onnx"
 
-        # Save uploaded file
+        job_id = uuid.uuid4().hex[:12]
         filename = secure_filename(file.filename)
         input_path = UPLOAD_FOLDER / f"input_{uuid.uuid4().hex[:8]}_{filename}"
         output_path = UPLOAD_FOLDER / f"output_{uuid.uuid4().hex[:8]}_{filename}"
         file.save(input_path)
 
-        # Detect faces in video
-        try:
-            detect_from_video(
-                video_path=str(input_path),
-                model_path=model,
-                output_path=str(output_path),
-                conf_threshold=0.32,
-                blur_faces=blur,
-            )
-        finally:
-            input_path.unlink(missing_ok=True)
+        with VIDEO_JOBS_LOCK:
+            VIDEO_JOBS[job_id] = {
+                "job_id": job_id,
+                "status": "queued",
+                "progress": 0,
+                "processed_frames": 0,
+                "total_frames": 0,
+                "fps": 0.0,
+                "eta_seconds": None,
+                "created_at": time.time(),
+                "output_file": output_path.name,
+                "download_url": f"/api/download/{output_path.name}",
+            }
 
+        VIDEO_EXECUTOR.submit(_run_video_job, job_id, input_path, output_path, model, blur)
         # Return file info
         response = {
             "success": True,
-            "message": "Video processing complete",
-            "output_file": output_path.name,
-            "download_url": f"/api/download/{output_path.name}",
+            "status": "queued",
+            "job_id": job_id,
+            "message": "Video job submitted to processing queue",
+            "status_url": f"/api/video-status/{job_id}",
         }
 
-        return jsonify(response)
+        return jsonify(response), 202
 
     except Exception:
         app.logger.exception("Error while processing video detection request")
         return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/api/video-status/<job_id>", methods=["GET"])
+def get_video_status(job_id: str):
+    with VIDEO_JOBS_LOCK:
+        job = VIDEO_JOBS.get(job_id)
+        if not job:
+            return jsonify({"success": False, "error": "Job not found or expired"}), 404
+        return jsonify({"success": True, **job})
 
 
 @app.route("/api/download/<filename>", methods=["GET"])

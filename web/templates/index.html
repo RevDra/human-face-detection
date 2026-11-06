@@ -346,8 +346,19 @@
                     <button class="btn-secondary" onclick="clearVideoForm()">🗑️ Clear</button>
                 </div>
 
-                <div class="progress-container" id="videoProgress" style="display: none; padding: 10px; text-align: center; font-weight: 500; color: #667eea;">
-                    <span class="spinner"></span> Processing... This may take a while.
+                <div class="progress" id="videoProgress" style="max-width: 520px; margin: 20px auto; padding: 20px; background: rgba(102, 126, 234, 0.08); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span id="videoProgressStatus" style="font-weight: 600; color: #667eea;">⏳ Queued for processing...</span>
+                        <span id="videoProgressPercent" style="font-weight: 700; font-size: 1.1em; color: #764ba2;">0%</span>
+                    </div>
+                    <div style="width: 100%; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-bottom: 10px;">
+                        <div id="videoProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 999px; transition: width 0.4s ease;"></div>
+                    </div>
+                    <div id="videoProgressMeta" style="font-size: 0.9em; color: #64748b; display: flex; justify-content: space-between;">
+                        <span>Frames: 0 / --</span>
+                        <span>Speed: -- FPS</span>
+                        <span>ETA: calculating...</span>
+                    </div>
                 </div>
 
                 <div class="result-container" id="videoResult">
@@ -831,7 +842,6 @@
                     gallerySection.style.display = 'none';
                 }
 
-                // --- 2. KHÔI PHỤC DETAIL LIST (DANH SÁCH CHI TIẾT) ---
                 const facesList = document.getElementById('facesList');
                 facesList.innerHTML = '';
                 
@@ -885,47 +895,126 @@
         }
     }
 
+    let videoPollTimer = null;
+  
     async function detectVideo() {
         const file = document.getElementById('videoFile').files[0];
         const model = document.getElementById('videoModel').value;
         const blur = document.getElementById('videoBlurFaces').checked;
         if (!file) { showMessage('videoMessage', 'Please select a video', 'error'); return; }
 
+        if (videoPollTimer) {
+          clearInterval(videoPollTimer);
+          videoPollTimer = null;
+        }
+      
         const formData = new FormData();
         formData.append('file', file);
         formData.append('model', model);
         formData.append('blur', blur);
 
-        document.getElementById('detectVideoBtn').disabled = true;
-        document.getElementById('videoProgress').style.display = 'block';
+        const btn = document.getElementById('detectVideoBtn');
+        const progressBox = document.getElementById('videoProgress');
+        const progressBar = document.getElementById('videoProgressBar');
+        const progressPercent = document.getElementById('videoProgressPercent');
+        const progressStatus = document.getElementById('videoProgressStatus');
+        const progressMeta = document.getElementById('videoProgressMeta');
+
+        btn.disabled = true;
+        progressBox.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+        progressStatus.textContent = '📤 Uploading video to server...';
+        progressMeta.innerHTML = '<span>Frames: 0 / --</span><span>Speed: -- FPS</span><span>ETA: --</span>';
         document.getElementById('videoResult').style.display = 'none';
         showMessage('videoMessage', '', 'info');
 
         try {
             const response = await fetch('/api/detect-video', { method: 'POST', body: formData });
             const data = await response.json();
-            if (data.success) {
-                lastFilename = file.name;
-                lastModel = model;
-                resetVideoRatingForm();
-                document.getElementById('videoResultText').innerHTML = `✅ Video processing complete!<br><small>Output file: ${data.output_file}</small>`;
-                document.getElementById('downloadLink').href = `${data.download_url}?download=1`;
-                const outputVideo = document.getElementById('outputVideo');
-                outputVideo.src = `${data.download_url}?t=${Date.now()}`;
-                outputVideo.style.display = 'block';
-                outputVideo.load();
+            if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to submit video job');
+                }
+            if (!data.job_id && data.download_url) {
+                    finishVideoSuccess(file.name, model, data);
+                    return;
+                }
+            const jobId = data.job_id;
+            progressStatus.textContent = '⏳ In queue... Starting worker...';
+            videoPollTimer = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`/api/video-status/${jobId}`);
+                    const job = await statusRes.json();
 
-                document.getElementById('videoResult').style.display = 'block';
-                showMessage('videoMessage', `✅ ${data.message}`, 'success');
-            } else {
-                showMessage('videoMessage', `Error: ${data.error}`, 'error');
-            }
+                    if (!statusRes.ok || !job.success) {
+                        throw new Error(job.error || 'Lost connection to video job');
+                    }
+
+                    const pct = job.progress || 0;
+                    progressBar.style.width = `${pct}%`;
+                    progressPercent.textContent = `${pct}%`;
+
+                    if (job.status === 'queued') {
+                        progressStatus.textContent = '⏳ Queued (waiting for previous video)...';
+                    } else if (job.status === 'processing') {
+                        progressStatus.textContent = blur
+                            ? '🕵️ Blurring faces in video...'
+                            : '🔍 Detecting faces in video...';
+                        const totalStr = job.total_frames > 0 ? job.total_frames : '--';
+                        const fpsStr = job.fps > 0 ? `${job.fps} FPS` : '-- FPS';
+                        const etaStr = (job.eta_seconds !== null && job.eta_seconds !== undefined)
+                            ? `${job.eta_seconds}s`
+                            : 'calculating...';
+                        progressMeta.innerHTML = `
+                            <span>Frames: ${job.processed_frames || 0} / ${totalStr}</span>
+                            <span>Speed: ${fpsStr}</span>
+                            <span>ETA: ~${etaStr}</span>
+                        `;
+                    } else if (job.status === 'completed') {
+                        clearInterval(videoPollTimer);
+                        videoPollTimer = null;
+                        finishVideoSuccess(file.name, model, job);
+                    } else if (job.status === 'failed') {
+                        clearInterval(videoPollTimer);
+                        videoPollTimer = null;
+                        progressBox.style.display = 'none';
+                        btn.disabled = false;
+                        showMessage('videoMessage', `Error: ${job.error || 'Video processing failed'}`, 'error');
+                    }
+                } catch (pollErr) {
+                    clearInterval(videoPollTimer);
+                    videoPollTimer = null;
+                    progressBox.style.display = 'none';
+                    btn.disabled = false;
+                    showMessage('videoMessage', `Error: ${pollErr.message}`, 'error');
+                }
+            }, 1000);
+
         } catch (err) {
+            progressBox.style.display = 'none';
+            btn.disabled = false;
             showMessage('videoMessage', `Error: ${err.message}`, 'error');
-        } finally {
-            document.getElementById('videoProgress').style.display = 'none';
-            document.getElementById('detectVideoBtn').disabled = false;
         }
+    }
+    function finishVideoSuccess(filename, model, data) {
+        lastFilename = filename;
+        lastModel = model;
+        resetVideoRatingForm();
+
+        const elapsedInfo = data.elapsed_seconds ? ` in ${data.elapsed_seconds}s` : '';
+        document.getElementById('videoResultText').innerHTML =
+            `✅ Video processing complete${elapsedInfo}!<br><small>Output file: ${data.output_file}</small>`;
+
+        document.getElementById('downloadLink').href = `${data.download_url}?download=1`;
+        const outputVideo = document.getElementById('outputVideo');
+        outputVideo.src = `${data.download_url}?t=${Date.now()}`;
+        outputVideo.style.display = 'block';
+        outputVideo.load();
+
+        document.getElementById('videoProgress').style.display = 'none';
+        document.getElementById('detectVideoBtn').disabled = false;
+        document.getElementById('videoResult').style.display = 'block';
+        showMessage('videoMessage', `✅ ${data.message || 'Video processing complete'}`, 'success');
     }
 
     function showMessage(id, text, type) {

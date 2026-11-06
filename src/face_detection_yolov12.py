@@ -95,7 +95,6 @@ class YOLOv12FaceDetector:
         self._initialized = True
 
     def _get_thread_buffers(self) -> tuple[np.ndarray, np.ndarray]:
-        """Lấy bộ đệm letterbox và blob riêng biệt cho từng luồng thực thi."""
         if not hasattr(self._thread_local, "letterbox_buffer"):
             self._thread_local.letterbox_buffer = np.full(
                 (self.input_height, self.input_width, 3), 114, dtype=np.uint8
@@ -342,6 +341,7 @@ def detect_from_video(
     frame_stride=4,
     max_dimension=1280,
     blur_faces=False,
+    progress_callback=None,
 ):
     """
     - Adaptive Frame Stride vs Linear Box Interpolation.
@@ -354,6 +354,7 @@ def detect_from_video(
     orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
 
     scale_factor = 1.0
     if max(orig_w, orig_h) > max_dimension:
@@ -436,6 +437,10 @@ def detect_from_video(
     )
     _write_frame(prev_frame)
 
+    processed_count = 1
+    if progress_callback:
+        progress_callback(processed_count, total_frames)
+
     while True:
         chunk_frames = []
         for _ in range(frame_stride):
@@ -469,6 +474,10 @@ def detect_from_video(
         _write_frame(last_frame)
 
         prev_dets = next_dets
+
+        processed_count += chunk_len
+        if progress_callback:
+            progress_callback(processed_count, total_frames)
 
     cap.release()
     if ffmpeg_proc and ffmpeg_proc.stdin:
