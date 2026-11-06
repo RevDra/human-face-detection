@@ -5,8 +5,8 @@ Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
 """
 
 import os
-import time
 import threading
+import time
 import uuid
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -15,10 +15,10 @@ os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
 
 import base64
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, cast
-from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -167,10 +167,14 @@ def is_video(filename):
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in {"mp4", "avi", "mov", "mkv"}
 
+
 _last_cleanup_time = 0.0
 _cleanup_lock = threading.Lock()
 
-def cleanup_old_files(directory: Path, max_age_seconds: int = 1800, min_interval: int = 300) -> None:
+
+def cleanup_old_files(
+    directory: Path, max_age_seconds: int = 1800, min_interval: int = 300
+) -> None:
     """Chỉ quét ổ cứng tối đa 5 phút (300s) một lần để tránh nghẽn I/O."""
     global _last_cleanup_time
     now = time.time()
@@ -194,25 +198,26 @@ def cleanup_old_files(directory: Path, max_age_seconds: int = 1800, min_interval
             except OSError:
                 pass
 
+
 VIDEO_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 VIDEO_JOBS: dict[str, dict] = {}
 VIDEO_JOBS_LOCK = threading.Lock()
+
 
 def cleanup_old_jobs(max_age_seconds: int = 1800) -> None:
     now = time.time()
     with VIDEO_JOBS_LOCK:
         expired_ids = [
-            jid for jid, info in VIDEO_JOBS.items()
+            jid
+            for jid, info in VIDEO_JOBS.items()
             if now - info.get("created_at", now) > max_age_seconds
         ]
         for jid in expired_ids:
             VIDEO_JOBS.pop(jid, None)
+
+
 def _run_video_job(
-    job_id: str,
-    input_path: Path,
-    output_path: Path,
-    model: str,
-    blur: bool
+    job_id: str, input_path: Path, output_path: Path, model: str, blur: bool
 ) -> None:
     start_time = time.time()
     with VIDEO_JOBS_LOCK:
@@ -282,7 +287,8 @@ def _run_video_job(
                 )
     finally:
         input_path.unlink(missing_ok=True)
-    
+
+
 @app.route("/")
 def index():
     """Main page"""
@@ -358,8 +364,8 @@ def detect_image():
 
         # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
         result_image = detector.draw_faces(
-          image, detections, show_conf=not blur, blur_faces=blur, inplace=True
-      )
+            image, detections, show_conf=not blur, blur_faces=blur, inplace=True
+        )
 
         if result_image is None:
             return jsonify({"error": "Failed to process image"}), 500
@@ -450,7 +456,7 @@ def detect_video():
                 "eta_seconds": None,
                 "created_at": time.time(),
                 "output_file": output_path.name,
-                "download_url": f"/api/download/{output_path.name}"
+                "download_url": f"/api/download/{output_path.name}",
             }
 
         VIDEO_EXECUTOR.submit(_run_video_job, job_id, input_path, output_path, model, blur)
@@ -460,7 +466,7 @@ def detect_video():
             "status": "queued",
             "job_id": job_id,
             "message": "Video job submitted to processing queue",
-            "status_url": f"/api/video-status/{job_id}"
+            "status_url": f"/api/video-status/{job_id}",
         }
 
         return jsonify(response), 202
@@ -469,6 +475,7 @@ def detect_video():
         app.logger.exception("Error while processing video detection request")
         return jsonify({"error": "Internal server error"}), 500
 
+
 @app.route("/api/video-status/<job_id>", methods=["GET"])
 def get_video_status(job_id: str):
     with VIDEO_JOBS_LOCK:
@@ -476,7 +483,8 @@ def get_video_status(job_id: str):
         if not job:
             return jsonify({"success": False, "error": "Job not found or expired"}), 404
         return jsonify({"success": True, **job})
-        
+
+
 @app.route("/api/download/<filename>", methods=["GET"])
 def download_file(filename):
     try:
