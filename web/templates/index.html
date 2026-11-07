@@ -16,6 +16,8 @@
         .card.dark-mode .upload-area p { color: #4ecca3; }
         .card.dark-mode .detection-stats { background: #1a1a2e; }
         .card.dark-mode .stat-value { color: #4ecca3; }
+        .card.dark-mode .face-item { background: #16213e; color: #e0e0e0; border-left-color: #4ecca3; }
+        .card.dark-mode .face-item strong { color: #4ecca3; }
         .container { max-width: 1200px; margin: 0 auto; }
         .header { text-align: center; color: white; margin-bottom: 40px; position: relative; }
         .theme-toggle { position: absolute; top: 0; right: 0; }
@@ -79,11 +81,6 @@
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-secondary { background: #e0e0e0; color: #333; }
         .btn-secondary:hover { background: #d0d0d0; }
-        .progress-container { display: none; margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #667eea; }
-        .progress-container p { margin: 0 0 10px 0; color: #333; font-weight: 500; }
-        .progress-bar { width: 100%; height: 12px; background: #e0e0e0; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); width: 0%; animation: progress-animation 2s ease-in-out infinite; transition: width 0.3s ease; }
-        @keyframes progress-animation { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
         .result-container { display: none; margin-top: 30px; }
         .result-image { max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 20px; }
         .detection-stats { background: #f8f9ff; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
@@ -92,18 +89,27 @@
         .stat-label { color: #666; font-weight: 500; }
         .stat-value { color: #667eea; font-weight: 600; font-size: 1.1em; }
         .faces-list { margin-top: 20px; }
-        .face-item { background: white; padding: 15px; border-left: 4px solid #667eea; margin-bottom: 10px; border-radius: 4px; }
+        .face-item { background: white; padding: 15px; border-left: 4px solid #667eea; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
         .face-item strong { color: #667eea; }
         .message { padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; }
         .message.error { background: #ffebee; color: #c62828; border-left: 4px solid #c62828; }
         .message.success { background: #e8f5e9; color: #2e7d32; border-left: 4px solid #2e7d32; }
         .message.info { background: #e3f2fd; color: #1565c0; border-left: 4px solid #1565c0; }
         .message.show { display: block; }
-        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(102, 126, 234, 0.3); border-radius: 50%; border-top-color: #667eea; animation: spin 1s ease-in-out infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .download-link { display: inline-block; margin-top: 15px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.3s ease; }
+        .download-link { display: inline-block; margin-top: 15px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.3s ease; text-align: center; }
         .download-link:hover { background: #764ba2; transform: translateY(-2px); }
         .footer { text-align: center; color: rgba(255,255,255,0.8); margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2); }
+        
+        @keyframes pulseProgress {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .progress-bar-animated {
+            background: linear-gradient(270deg, #667eea, #764ba2, #4ecca3, #667eea) !important;
+            background-size: 300% 300% !important;
+            animation: pulseProgress 1.5s ease infinite;
+        }
         @media (max-width: 768px) { .header h1 { font-size: 1.8em; } .card { padding: 20px; } .tabs { flex-direction: column; } .tab-button { width: 100%; } }
         
         .rating-box { 
@@ -258,8 +264,20 @@
                     <button class="btn-secondary" onclick="clearImageForm()">🗑️ Clear</button>
                 </div>
 
-                <div class="progress-container" id="imageProgress" style="display: none; padding: 10px; text-align: center; font-weight: 500; color: #667eea;">
-                    <span class="spinner"></span> Processing...
+                <!-- 2-PHASE PROGRESS BAR CHO IMAGE -->
+                <div class="progress" id="imageProgress" style="display: none; max-width: 520px; margin: 20px auto; padding: 20px; background: rgba(102, 126, 234, 0.08); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span id="imageProgressStatus" style="font-weight: 600; color: #667eea;">📤 Uploading image...</span>
+                        <span id="imageProgressPercent" style="font-weight: 700; font-size: 1.1em; color: #764ba2;">0%</span>
+                    </div>
+                    <div style="width: 100%; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-bottom: 10px;">
+                        <div id="imageProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 999px; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div id="imageProgressMeta" style="font-size: 0.9em; color: #64748b; display: flex; justify-content: space-between;">
+                        <span id="imageMetaLeft">Uploaded: 0 / -- MB</span>
+                        <span id="imageMetaMid">Speed: -- MB/s</span>
+                        <span id="imageMetaRight">ETA: --</span>
+                    </div>
                 </div>
 
                 <div class="result-container" id="imageResult">
@@ -315,7 +333,6 @@
                               <option>Loading models...</option>
                         </select>
                     </div>
-    <!-- Thêm checkbox Privacy Mode cho Video -->
                     <div style="flex: 1; min-width: 220px; display: flex; align-items: center; gap: 12px; margin-top: 25px; padding: 10px; background: rgba(102, 126, 234, 0.1); border-radius: 8px;">
                         <input type="checkbox" id="videoBlurFaces" style="width: 22px; height: 22px; cursor: pointer;">
                         <label for="videoBlurFaces" style="margin-bottom: 0; cursor: pointer; font-weight: 600;">🕵️ Privacy Mode (Blur Faces)</label>
@@ -346,18 +363,19 @@
                     <button class="btn-secondary" onclick="clearVideoForm()">🗑️ Clear</button>
                 </div>
 
-                <div class="progress" id="videoProgress" style="max-width: 520px; margin: 20px auto; padding: 20px; background: rgba(102, 126, 234, 0.08); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.2);">
+                <!-- 2-PHASE PROGRESS BAR CHO VIDEO -->
+                <div class="progress" id="videoProgress" style="display: none; max-width: 520px; margin: 20px auto; padding: 20px; background: rgba(102, 126, 234, 0.08); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.2);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span id="videoProgressStatus" style="font-weight: 600; color: #667eea;">⏳ Queued for processing...</span>
+                        <span id="videoProgressStatus" style="font-weight: 600; color: #667eea;">📤 Uploading video...</span>
                         <span id="videoProgressPercent" style="font-weight: 700; font-size: 1.1em; color: #764ba2;">0%</span>
                     </div>
                     <div style="width: 100%; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-bottom: 10px;">
-                        <div id="videoProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 999px; transition: width 0.4s ease;"></div>
+                        <div id="videoProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 999px; transition: width 0.35s ease;"></div>
                     </div>
                     <div id="videoProgressMeta" style="font-size: 0.9em; color: #64748b; display: flex; justify-content: space-between;">
-                        <span>Frames: 0 / --</span>
-                        <span>Speed: -- FPS</span>
-                        <span>ETA: calculating...</span>
+                        <span id="videoMetaLeft">Uploaded: 0 / -- MB</span>
+                        <span id="videoMetaMid">Speed: -- MB/s</span>
+                        <span id="videoMetaRight">ETA: --</span>
                     </div>
                 </div>
 
@@ -785,116 +803,225 @@
     }
     if (localStorage.getItem('theme') === 'dark') toggleDarkMode();
 
+    // Hàm cập nhật thanh tiến trình an toàn, chống NaN và hỗ trợ reset tức thì về 0%
+    function setProgressValue(barEl, pctEl, pct, instant = false, customLabel = null) {
+        const numericPct = Number.isFinite(Number(pct)) ? Math.max(0, Math.min(100, Math.round(Number(pct)))) : 0;
+        const textToShow = customLabel !== null ? customLabel : `${numericPct}%`;
+
+        if (instant) {
+            barEl.style.transition = 'none';
+            barEl.style.width = `${numericPct}%`;
+            pctEl.textContent = textToShow;
+            void barEl.offsetHeight; // Ép reflow tức thì để không bị hiệu ứng tụt lùi
+            barEl.style.transition = 'width 0.3s ease';
+        } else {
+            barEl.style.width = `${numericPct}%`;
+            pctEl.textContent = textToShow;
+        }
+    }
+
+    function toggleFacesList() {
+        const list = document.getElementById('facesList');
+        const btn = document.getElementById('toggleFacesBtn');
+        if (!list || !btn) return;
+        if (list.style.display === 'none' || list.style.display === '') {
+            list.style.display = 'block';
+            btn.textContent = '🔼 Hide Detail List';
+        } else {
+            list.style.display = 'none';
+            btn.textContent = '👁️ Detail List';
+        }
+    }
+
+    // ==================== IMAGE DETECTION (2-STAGE: UPLOAD -> RESET -> INFERENCE) ====================
+    let imageInferTimer = null;
+
     async function detectImage() {
         const file = document.getElementById('imageFile').files[0];
         const model = document.getElementById('imageModel').value;
         const blur = document.getElementById('blurFaces').checked;
         if (!file) { showMessage('imageMessage', 'Please select an image', 'error'); return; }
 
+        if (imageInferTimer) {
+            clearInterval(imageInferTimer);
+            imageInferTimer = null;
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('model', model);
         formData.append('blur', blur);
 
-        document.getElementById('detectImageBtn').disabled = true;
-        document.getElementById('imageProgress').style.display = 'block';
+        const btn = document.getElementById('detectImageBtn');
+        const progressBox = document.getElementById('imageProgress');
+        const progressBar = document.getElementById('imageProgressBar');
+        const progressPercent = document.getElementById('imageProgressPercent');
+        const progressStatus = document.getElementById('imageProgressStatus');
+        const metaLeft = document.getElementById('imageMetaLeft');
+        const metaMid = document.getElementById('imageMetaMid');
+        const metaRight = document.getElementById('imageMetaRight');
+
+        btn.disabled = true;
+        progressBox.style.display = 'block';
+        progressBar.classList.remove('progress-bar-animated');
+        setProgressValue(progressBar, progressPercent, 0, true);
+        progressStatus.textContent = '📤 Phase 1/2: Uploading image to server...';
+        if (metaLeft) metaLeft.textContent = 'Uploaded: 0.00 / -- MB';
+        if (metaMid) metaMid.textContent = 'Speed: -- MB/s';
+        if (metaRight) metaRight.textContent = 'ETA: --';
+
         document.getElementById('imageResult').style.display = 'none';
         showMessage('imageMessage', '', 'info');
 
+        const uploadStartTime = performance.now();
+
         try {
-            const response = await fetch('/api/detect-image', { method: 'POST', body: formData });
-            const data = await response.json();
-            
-            if (data.success) {
-                lastFilename = file.name;
-                lastModel = model;
-                resetRatingForm();
-                
-                // Hiển thị ảnh kết quả chính
-                document.getElementById('resultImage').src = data.image;
-                document.getElementById('faceCount').textContent = data.detections.count;
-                
-                // --- 1. KHÔI PHỤC FACE GALLERY (CÁC ẢNH CẮT KHUÔN MẶT) ---
-                const cropsContainer = document.getElementById('cropsContainer');
-                const gallerySection = document.getElementById('gallerySection');
-                cropsContainer.innerHTML = '';
+            const data = await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                let lastUiUpdate = 0;
 
-                if (data.detections.crops && data.detections.crops.length > 0) {
-                    data.detections.crops.forEach((cropBase64, index) => {
+                // GIAI ĐOẠN 1: THEO DÕI TIẾN ĐỘ TẢI ẢNH LÊN (0% -> 100%)
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable && e.total > 0) {
+                        const now = performance.now();
+                        if (now - lastUiUpdate < 60 && e.loaded < e.total) return;
+                        lastUiUpdate = now;
+
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        setProgressValue(progressBar, progressPercent, pct, false);
+
+                        const elapsedSec = Math.max(0.05, (now - uploadStartTime) / 1000);
+                        const speedMBps = (e.loaded / (1024 * 1024)) / elapsedSec;
+                        const safeSpeed = Number.isFinite(speedMBps) ? speedMBps : 0;
+                        const loadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
+                        const totalMB = (e.total / (1024 * 1024)).toFixed(2);
+                        const remainingMB = Math.max(0, (e.total - e.loaded) / (1024 * 1024));
+                        const etaSec = safeSpeed > 0.01 ? Math.ceil(remainingMB / safeSpeed) : 0;
+
+                        progressStatus.textContent = '📤 Phase 1/2: Uploading image to server...';
+                        if (metaLeft) metaLeft.textContent = `Uploaded: ${loadedMB} / ${totalMB} MB`;
+                        if (metaMid) metaMid.textContent = `Speed: ${safeSpeed.toFixed(1)} MB/s`;
+                        if (metaRight) metaRight.textContent = `ETA: ~${etaSec}s`;
+                    }
+                });
+
+                // KHI TẢI LÊN HOÀN TẤT -> RESET VỀ 0% VÀ BIẾN THÀNH THANH SUY LUẬN AI (GIAI ĐOẠN 2)
+                xhr.upload.addEventListener('load', () => {
+                    setProgressValue(progressBar, progressPercent, 0, true);
+                    progressBar.classList.add('progress-bar-animated');
+                    progressStatus.textContent = blur
+                        ? '🕵️ Phase 2/2: Blurring faces with YOLOv12...'
+                        : '🔍 Phase 2/2: Running YOLOv12 face inference...';
+
+                    const shortModel = (model || 'yolov12').split('.')[0];
+                    if (metaLeft) metaLeft.textContent = 'Stage: AI Inference';
+                    if (metaMid) metaMid.textContent = `Model: ${shortModel}`;
+                    if (metaRight) metaRight.textContent = 'Status: Inferring...';
+
+                    // Chạy thanh tiến trình suy luận tăng dần từ 0% -> 90% trong lúc đợi server phản hồi
+                    let simulatedPct = 15;
+                    setProgressValue(progressBar, progressPercent, simulatedPct, false);
+                    imageInferTimer = setInterval(() => {
+                        if (simulatedPct < 90) {
+                            simulatedPct += Math.max(2, Math.round((90 - simulatedPct) * 0.25));
+                            setProgressValue(progressBar, progressPercent, simulatedPct, false);
+                        }
+                    }, 120);
+                });
+
+                xhr.onload = function () {
+                    if (imageInferTimer) {
+                        clearInterval(imageInferTimer);
+                        imageInferTimer = null;
+                    }
+                    progressBar.classList.remove('progress-bar-animated');
+                    let json = {};
+                    try { json = JSON.parse(xhr.responseText); } catch (_) {}
+                    if (xhr.status >= 200 && xhr.status < 300 && json.success) {
+                        setProgressValue(progressBar, progressPercent, 100, false);
+                        if (json.engine && metaMid) {
+                            metaMid.textContent = `Engine: ${json.engine}`;
+                        }
+                        if (metaRight) metaRight.textContent = 'Status: Completed!';
+                        resolve(json);
+                    } else {
+                        reject(new Error(json.error || `Server error (${xhr.status})`));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    if (imageInferTimer) {
+                        clearInterval(imageInferTimer);
+                        imageInferTimer = null;
+                    }
+                    progressBar.classList.remove('progress-bar-animated');
+                    reject(new Error('Network error during image upload'));
+                };
+
+                xhr.open('POST', '/api/detect-image', true);
+                xhr.send(formData);
+            });
+
+            lastFilename = file.name;
+            lastModel = model;
+            resetRatingForm();
+
+            const detections = data.detections || {};
+            const count = detections.count !== undefined ? detections.count : 0;
+
+            document.getElementById('faceCount').textContent = count;
+            document.getElementById('resultImage').src = data.image;
+
+            // Hiển thị Face Gallery
+            const gallery = document.getElementById('gallerySection');
+            const container = document.getElementById('cropsContainer');
+            if (gallery && container) {
+                container.innerHTML = '';
+                if (detections.crops && detections.crops.length > 0) {
+                    detections.crops.forEach((cropB64, idx) => {
                         const img = document.createElement('img');
-                        img.src = `data:image/jpeg;base64,${cropBase64}`;
-                        img.style.width = '80px';
-                        img.style.height = '80px';
-                        img.style.objectFit = 'cover';
-                        img.style.borderRadius = '6px';
-                        img.style.cursor = 'pointer';
-                        img.style.border = '2px solid #667eea';
-                        img.title = `Face ${index + 1}`;
-                        // Click vào ảnh cắt để mở rộng xem ảnh lớn
-                        img.onclick = () => {
-                            const win = window.open();
-                            win.document.write(`<title>Face ${index + 1}</title><img src="data:image/jpeg;base64,${cropBase64}" style="max-width:100%;">`);
-                        };
-                        cropsContainer.appendChild(img);
+                        img.src = `data:image/jpeg;base64,${cropB64}`;
+                        img.title = `Face #${idx + 1}`;
+                        img.style.cssText = 'width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 2px solid #667eea; box-shadow: 0 2px 6px rgba(0,0,0,0.12);';
+                        container.appendChild(img);
                     });
-                    gallerySection.style.display = 'block';
+                    gallery.style.display = 'block';
                 } else {
-                    gallerySection.style.display = 'none';
+                    gallery.style.display = 'none';
                 }
-
-                const facesList = document.getElementById('facesList');
-                facesList.innerHTML = '';
-                
-                if (data.detections.count > 0) {
-                    data.detections.faces.forEach(face => {
-                        const item = document.createElement('div');
-                        item.className = 'face-item';
-                        item.innerHTML = `
-                            <strong>Face ${face.id}</strong><br>
-                            Confidence: ${face.confidence}<br>
-                            Size: ${face.width}×${face.height}px<br>
-                            Position: ${face.position}
-                        `;
-                        facesList.appendChild(item);
-                    });
-                    const toggleBtn = document.getElementById('toggleFacesBtn');
-                    facesList.style.display = 'none'; 
-                    toggleBtn.style.display = 'block';
-                    toggleBtn.innerHTML = `👁️ Detail List (${data.detections.count} faces)`;
-                } else {
-                    facesList.innerHTML = '<p style="color: #999;">No faces detected</p>';
-                    facesList.style.display = 'block'; 
-                    document.getElementById('toggleFacesBtn').style.display = 'none'; 
-                }
-                
-                document.getElementById('imageResult').style.display = 'block';
-                showMessage('imageMessage', `✅ Found ${data.detections.count} face(s)!`, 'success');
-            } else {
-                showMessage('imageMessage', `Error: ${data.error}`, 'error');
             }
+
+            // Hiển thị Detail List (toggleFacesList)
+            const facesList = document.getElementById('facesList');
+            const toggleBtn = document.getElementById('toggleFacesBtn');
+            if (facesList && toggleBtn) {
+                facesList.innerHTML = '';
+                facesList.style.display = 'none';
+                if (detections.faces && detections.faces.length > 0) {
+                    detections.faces.forEach((face) => {
+                        const div = document.createElement('div');
+                        div.className = 'face-item';
+                        div.innerHTML = `<strong>Face #${face.id}</strong> — Confidence: ${face.confidence} | Size: ${face.width}×${face.height}px | Pos: ${face.position}`;
+                        facesList.appendChild(div);
+                    });
+                    toggleBtn.style.display = 'block';
+                    toggleBtn.textContent = '👁️ Detail List';
+                } else {
+                    toggleBtn.style.display = 'none';
+                }
+            }
+
+            document.getElementById('imageResult').style.display = 'block';
+            showMessage('imageMessage', `✅ Detection complete! Found ${count} face(s)`, 'success');
         } catch (err) {
             showMessage('imageMessage', `Error: ${err.message}`, 'error');
         } finally {
-            document.getElementById('imageProgress').style.display = 'none';
-            document.getElementById('detectImageBtn').disabled = false;
+            progressBox.style.display = 'none';
+            btn.disabled = false;
         }
     }
 
-    // Hàm phụ trợ bật/tắt danh sách chi tiết (Detail List)
-    function toggleFacesList() {
-        const list = document.getElementById('facesList');
-        const btn = document.getElementById('toggleFacesBtn');
-        if (list.style.display === 'none') {
-            list.style.display = 'block';
-            btn.innerHTML = '⬆️ Shrink Details';
-            btn.style.background = '#f0f2ff';
-        } else {
-            list.style.display = 'none';
-            btn.innerHTML = '👁️ Detail List';
-            btn.style.background = 'transparent';
-        }
-    }
-
+    // ==================== VIDEO DETECTION (2-STAGE: UPLOAD -> RESET -> INFERENCE) ====================
     let videoPollTimer = null;
   
     async function detectVideo() {
@@ -904,8 +1031,8 @@
         if (!file) { showMessage('videoMessage', 'Please select a video', 'error'); return; }
 
         if (videoPollTimer) {
-          clearInterval(videoPollTimer);
-          videoPollTimer = null;
+            clearInterval(videoPollTimer);
+            videoPollTimer = null;
         }
       
         const formData = new FormData();
@@ -918,29 +1045,90 @@
         const progressBar = document.getElementById('videoProgressBar');
         const progressPercent = document.getElementById('videoProgressPercent');
         const progressStatus = document.getElementById('videoProgressStatus');
-        const progressMeta = document.getElementById('videoProgressMeta');
+        const metaLeft = document.getElementById('videoMetaLeft');
+        const metaMid = document.getElementById('videoMetaMid');
+        const metaRight = document.getElementById('videoMetaRight');
 
         btn.disabled = true;
         progressBox.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressPercent.textContent = '0%';
-        progressStatus.textContent = '📤 Uploading video to server...';
-        progressMeta.innerHTML = '<span>Frames: 0 / --</span><span>Speed: -- FPS</span><span>ETA: --</span>';
+        progressBar.classList.remove('progress-bar-animated');
+        setProgressValue(progressBar, progressPercent, 0, true);
+        progressStatus.textContent = '📤 Phase 1/2: Uploading video to server...';
+        if (metaLeft) metaLeft.textContent = 'Uploaded: 0.0 / -- MB';
+        if (metaMid) metaMid.textContent = 'Speed: -- MB/s';
+        if (metaRight) metaRight.textContent = 'ETA: --';
+
         document.getElementById('videoResult').style.display = 'none';
         showMessage('videoMessage', '', 'info');
 
+        const uploadStartTime = performance.now();
+
         try {
-            const response = await fetch('/api/detect-video', { method: 'POST', body: formData });
-            const data = await response.json();
-            if (!response.ok || !data.success) {
-                    throw new Error(data.error || 'Failed to submit video job');
-                }
+            // GIAI ĐOẠN 1: THEO DÕI TIẾN ĐỘ TẢI VIDEO LÊN (0% -> 100%)
+            const data = await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                let lastUiUpdate = 0;
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable && e.total > 0) {
+                        const now = performance.now();
+                        if (now - lastUiUpdate < 80 && e.loaded < e.total) return;
+                        lastUiUpdate = now;
+
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        setProgressValue(progressBar, progressPercent, pct, false);
+
+                        const elapsedSec = Math.max(0.05, (now - uploadStartTime) / 1000);
+                        const speedMBps = (e.loaded / (1024 * 1024)) / elapsedSec;
+                        const safeSpeed = Number.isFinite(speedMBps) ? speedMBps : 0;
+                        const loadedMB = (e.loaded / (1024 * 1024)).toFixed(1);
+                        const totalMB = (e.total / (1024 * 1024)).toFixed(1);
+                        const remainingMB = Math.max(0, (e.total - e.loaded) / (1024 * 1024));
+                        const etaSec = safeSpeed > 0.01 ? Math.ceil(remainingMB / safeSpeed) : 0;
+
+                        progressStatus.textContent = '📤 Phase 1/2: Uploading video to server...';
+                        if (metaLeft) metaLeft.textContent = `Uploaded: ${loadedMB} / ${totalMB} MB`;
+                        if (metaMid) metaMid.textContent = `Speed: ${safeSpeed.toFixed(1)} MB/s`;
+                        if (metaRight) metaRight.textContent = `ETA: ~${etaSec}s`;
+                    }
+                });
+
+                // KHI TẢI LÊN HOÀN TẤT -> RESET TỨC THÌ VỀ 0% ĐỂ CHUYỂN SANG THANH SUY LUẬN AI
+                xhr.upload.addEventListener('load', () => {
+                    setProgressValue(progressBar, progressPercent, 0, true);
+                    progressStatus.textContent = '⏳ Phase 2/2: Upload complete! Starting AI inference...';
+                    if (metaLeft) metaLeft.textContent = 'Frames: 0 / --';
+                    if (metaMid) metaMid.textContent = 'Speed: -- FPS';
+                    if (metaRight) metaRight.textContent = 'ETA: calculating...';
+                });
+
+                xhr.onload = function () {
+                    let json = {};
+                    try { json = JSON.parse(xhr.responseText); } catch (_) {}
+                    if ((xhr.status === 200 || xhr.status === 202) && json.success) {
+                        resolve(json);
+                    } else {
+                        reject(new Error(json.error || `Upload failed with status ${xhr.status}`));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error('Network connection error during video upload'));
+
+                xhr.open('POST', '/api/detect-video', true);
+                xhr.send(formData);
+            });
+
             if (!data.job_id && data.download_url) {
-                    finishVideoSuccess(file.name, model, data);
-                    return;
-                }
+                finishVideoSuccess(file.name, model, data);
+                return;
+            }
+
+            // GIAI ĐOẠN 2: POLLING TIẾN ĐỘ SUY LUẬN VIDEO (0% -> 100%)
             const jobId = data.job_id;
-            progressStatus.textContent = '⏳ In queue... Starting worker...';
+            setProgressValue(progressBar, progressPercent, 0, true);
+            progressBar.classList.add('progress-bar-animated');
+            progressStatus.textContent = '⏳ Phase 2/2: Queued for AI inference...';
+
             videoPollTimer = setInterval(async () => {
                 try {
                     const statusRes = await fetch(`/api/video-status/${jobId}`);
@@ -951,32 +1139,32 @@
                     }
 
                     const pct = job.progress || 0;
-                    progressBar.style.width = `${pct}%`;
-                    progressPercent.textContent = `${pct}%`;
+                    setProgressValue(progressBar, progressPercent, pct, false);
 
                     if (job.status === 'queued') {
-                        progressStatus.textContent = '⏳ Queued (waiting for previous video)...';
+                        progressStatus.textContent = '⏳ Phase 2/2: Queued (waiting for previous video)...';
                     } else if (job.status === 'processing') {
                         progressStatus.textContent = blur
-                            ? '🕵️ Blurring faces in video...'
-                            : '🔍 Detecting faces in video...';
+                            ? '🕵️ Phase 2/2: Blurring faces in video...'
+                            : '🔍 Phase 2/2: Detecting faces in video...';
                         const totalStr = job.total_frames > 0 ? job.total_frames : '--';
                         const fpsStr = job.fps > 0 ? `${job.fps} FPS` : '-- FPS';
                         const etaStr = (job.eta_seconds !== null && job.eta_seconds !== undefined)
                             ? `${job.eta_seconds}s`
                             : 'calculating...';
-                        progressMeta.innerHTML = `
-                            <span>Frames: ${job.processed_frames || 0} / ${totalStr}</span>
-                            <span>Speed: ${fpsStr}</span>
-                            <span>ETA: ~${etaStr}</span>
-                        `;
+                        if (metaLeft) metaLeft.textContent = `Frames: ${job.processed_frames || 0} / ${totalStr}`;
+                        if (metaMid) metaMid.textContent = `Speed: ${fpsStr}`;
+                        if (metaRight) metaRight.textContent = `ETA: ~${etaStr}`;
                     } else if (job.status === 'completed') {
                         clearInterval(videoPollTimer);
                         videoPollTimer = null;
+                        progressBar.classList.remove('progress-bar-animated');
+                        setProgressValue(progressBar, progressPercent, 100, false);
                         finishVideoSuccess(file.name, model, job);
                     } else if (job.status === 'failed') {
                         clearInterval(videoPollTimer);
                         videoPollTimer = null;
+                        progressBar.classList.remove('progress-bar-animated');
                         progressBox.style.display = 'none';
                         btn.disabled = false;
                         showMessage('videoMessage', `Error: ${job.error || 'Video processing failed'}`, 'error');
@@ -984,6 +1172,7 @@
                 } catch (pollErr) {
                     clearInterval(videoPollTimer);
                     videoPollTimer = null;
+                    progressBar.classList.remove('progress-bar-animated');
                     progressBox.style.display = 'none';
                     btn.disabled = false;
                     showMessage('videoMessage', `Error: ${pollErr.message}`, 'error');
@@ -991,11 +1180,13 @@
             }, 1000);
 
         } catch (err) {
+            progressBar.classList.remove('progress-bar-animated');
             progressBox.style.display = 'none';
             btn.disabled = false;
             showMessage('videoMessage', `Error: ${err.message}`, 'error');
         }
     }
+
     function finishVideoSuccess(filename, model, data) {
         lastFilename = filename;
         lastModel = model;
@@ -1039,6 +1230,7 @@
         document.getElementById('imageFile').value = '';
         document.getElementById('imageFileInfo').style.display = 'none';
         document.getElementById('imageResult').style.display = 'none';
+        document.getElementById('ratingSection').style.display = 'none';
         showMessage('imageMessage', '', '');
     }
 
@@ -1047,6 +1239,7 @@
         document.getElementById('videoFileInfo').style.display = 'none';
         document.getElementById('outputVideo').style.display = 'none';
         document.getElementById('videoResult').style.display = 'none';
+        document.getElementById('videoRatingSection').style.display = 'none';
         showMessage('videoMessage', '', '');
     }
 
