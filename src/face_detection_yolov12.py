@@ -58,7 +58,7 @@ class YOLOv12FaceDetector:
         sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         sess_options.intra_op_num_threads = 2
         sess_options.inter_op_num_threads = 1
-        sess_options.enable_cpu_mem_arena = True
+        sess_options.enable_cpu_mem_arena = False
         sess_options.enable_mem_pattern = True
         sess_options.add_session_config_entry("session.intra_op.allow_spinning", "1")
 
@@ -363,7 +363,10 @@ def detect_from_video(
     out_h = int(round(orig_h * scale_factor)) // 2 * 2
     need_resize = (out_w != orig_w) or (out_h != orig_h)
 
-    detector = YOLOv12FaceDetector(model_path)
+    if isinstance(model_path, YOLOv12FaceDetector):
+        detector = model_path
+    else:
+        detector = YOLOv12FaceDetector(model_path)
 
     ffmpeg_proc = None
     cv_writer = None
