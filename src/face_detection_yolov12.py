@@ -1,8 +1,17 @@
+"""
+Human Face Detection using YOLOv12 (ONNX Runtime)
+Supports image, video, and real-time webcam detection
+"""
+
+import argparse
+import os
+import queue
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -10,481 +19,845 @@ import onnxruntime as ort
 
 
 class YOLOv12FaceDetector:
-    """
-    YOLOv12 Face Detector on pure ONNX Runtime.
-    Apply Singleton Pattern to cache Inference Session in RAM.
-    """
+    """Face detector using ONNX Runtime with YOLOv12 model."""
 
-    _instances: dict[str, Any] = {}
-    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-    _MODELS_DIR = (_PROJECT_ROOT / "models").resolve()
+    def __init__(
+        self,
+        model_path: str = "models/yolov12n-face.onnx",
+        conf_threshold: float = 0.32,
+        iou_threshold: float = 0.45,
+        input_size: Tuple[int, int] = (640, 640),
+    ):
+        """
+        Initialize the YOLOv12 Face Detector.
 
-    @classmethod
-    def _resolve_model_path(cls, model_path: str) -> Path:
-        raw_value = str(model_path)
-        safe_name = Path(raw_value).name
-        if safe_name != raw_value:
-            raise ValueError("Model path must be a file name within the models directory.")
+        Args:
+            model_path: Path to the ONNX model file
+            conf_threshold: Confidence threshold for detections
+            iou_threshold: IoU threshold for NMS
+            input_size: Model input resolution (width, height)
+        """
+        self.conf_threshold = conf_threshold
+        self.iou_threshold = iou_threshold
+        self.input_size = input_size
 
-        candidate = cls._MODELS_DIR / safe_name
-        resolved = candidate.resolve()
-        try:
-            resolved.relative_to(cls._MODELS_DIR)
-        except ValueError as exc:
-            raise ValueError("Model path is outside the allowed models directory.") from exc
-        return resolved
-
-    def __new__(cls, model_path="yolov12n-face-int8.onnx"):
-        resolved_path = str(cls._resolve_model_path(str(model_path)))
-        if resolved_path not in cls._instances:
-            instance = super(YOLOv12FaceDetector, cls).__new__(cls)
-            instance._initialized = False
-            cls._instances[resolved_path] = instance
-        return cls._instances[resolved_path]
-
-    def __init__(self, model_path="yolov12n-face-int8.onnx"):
-        if getattr(self, "_initialized", False):
-            return
-
-        model_file = self._resolve_model_path(str(model_path))
+        model_file = Path(model_path)
         if not model_file.exists():
-            raise FileNotFoundError(
-                f"The model is not found at: {model_file}\n"
-                f"Please put the model's file at folder 'models/'."
-            )
+            project_root = Path(__file__).resolve().parent.parent
+            model_file = project_root / model_path
+
+        if not model_file.exists():
+            raise FileNotFoundError(f"ONNX model not found at: {model_file}")
 
         sess_options = ort.SessionOptions()
-        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        sess_options.intra_op_num_threads = 2
+        sess_options.intra_op_num_threads = min(os.cpu_count() or 4, 4)
         sess_options.inter_op_num_threads = 1
-        sess_options.enable_cpu_mem_arena = False
+        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.enable_cpu_mem_arena = True
         sess_options.enable_mem_pattern = True
-        sess_options.add_session_config_entry("session.intra_op.allow_spinning", "1")
+
+        opt_model_file = model_file.with_suffix(".opt.onnx")
+        load_target = model_file
+        try:
+            if (
+                opt_model_file.exists()
+                and opt_model_file.stat().st_mtime >= model_file.stat().st_mtime
+            ):
+                load_target = opt_model_file
+                sess_options.graph_optimization_level = (
+                    ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+                )
+            else:
+                sess_options.graph_optimization_level = (
+                    ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                )
+                if os.access(model_file.parent, os.W_OK):
+                    sess_options.optimized_model_filepath = str(opt_model_file)
+        except OSError:
+            sess_options.graph_optimization_level = (
+                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            )
+            load_target = model_file
 
         available_providers = ort.get_available_providers()
-        preferred_providers = [
-            p
-            for p in [
-                "OpenVINOExecutionProvider",
-                "CUDAExecutionProvider",
-                "CPUExecutionProvider",
-            ]
-            if p in available_providers
-        ]
+        providers = ["CPUExecutionProvider"]
+        if "CUDAExecutionProvider" in available_providers:
+            providers.insert(0, "CUDAExecutionProvider")
 
-        self.session = ort.InferenceSession(
-            str(model_file),
-            sess_options=sess_options,
-            providers=preferred_providers or ["CPUExecutionProvider"],
-        )
-
-        model_inputs = self.session.get_inputs()[0]
-        self.input_name = model_inputs.name
-        input_shape = model_inputs.shape
-        self.input_height = input_shape[2] if isinstance(input_shape[2], int) else 640
-        self.input_width = input_shape[3] if isinstance(input_shape[3], int) else 640
-
-        self.input_size = self.input_height
-        self._thread_local = threading.local()
-        self._blob_buffer = np.empty((1, 3, self.input_height, self.input_width), dtype=np.float32)
-
-        dummy_input = np.zeros((1, 3, self.input_height, self.input_width), dtype=np.float32)
-        self.session.run(None, {self.input_name: dummy_input})
-
-        self._initialized = True
-
-    def _get_thread_buffers(self) -> tuple[np.ndarray, np.ndarray]:
-        if not hasattr(self._thread_local, "letterbox_buffer"):
-            self._thread_local.letterbox_buffer = np.full(
-                (self.input_height, self.input_width, 3), 114, dtype=np.uint8
+        try:
+            self.session = ort.InferenceSession(
+                str(load_target), sess_options=sess_options, providers=providers
             )
-            self._thread_local.blob_buffer = np.empty(
-                (1, 3, self.input_height, self.input_width), dtype=np.float32
+        except Exception:
+            sess_options.optimized_model_filepath = ""
+            sess_options.graph_optimization_level = (
+                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             )
-        return self._thread_local.letterbox_buffer, self._thread_local.blob_buffer
+            self.session = ort.InferenceSession(
+                str(model_file), sess_options=sess_options, providers=providers
+            )
 
-    def _preprocess(self, image: np.ndarray):
-        """Preprocess Letterbox utilizing 100% thread-safe zero-copy buffers."""
-        buffer, blob_buffer = self._get_thread_buffers()
-        img_h, img_w = image.shape[:2]
-        scale = min(self.input_size / img_w, self.input_size / img_h)
-        new_w, new_h = int(round(img_w * scale)), int(round(img_h * scale))
+        self.input_name = self.session.get_inputs()[0].name
+        self.output_names = [out.name for out in self.session.get_outputs()]
 
-        pad_w = (self.input_size - new_w) / 2.0
-        pad_h = (self.input_size - new_h) / 2.0
-        top = int(round(pad_h - 0.1))
-        left = int(round(pad_w - 0.1))
+        self._local = threading.local()
 
-        buffer.fill(114)
+    def _get_buffers(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Get thread-local pre-allocated buffers for zero-copy preprocessing."""
+        target_w, target_h = self.input_size
+        if not hasattr(self._local, "letterbox_buf"):
+            self._local.letterbox_buf = np.full(
+                (target_h, target_w, 3), 114, dtype=np.uint8
+            )
+            self._local.blob_buffer = np.empty(
+                (1, 3, target_h, target_w), dtype=np.float32
+            )
+        return self._local.letterbox_buf, self._local.blob_buffer
+
+    def preprocess(
+        self, image: np.ndarray
+    ) -> Tuple[np.ndarray, float, Tuple[int, int]]:
+        """
+        Preprocess image for YOLOv12 inference using letterbox resize.
+
+        Args:
+            image: Input BGR image (H, W, C)
+
+        Returns:
+            Tuple of (input_tensor, scale, (pad_w, pad_h))
+        """
+        orig_h, orig_w = image.shape[:2]
+        target_w, target_h = self.input_size
+
+        scale = min(target_w / orig_w, target_h / orig_h)
+        new_w = int(round(orig_w * scale))
+        new_h = int(round(orig_h * scale))
+
+        pad_w = (target_w - new_w) // 2
+        pad_h = (target_h - new_h) // 2
+
+        letterbox_buf, blob_buffer = self._get_buffers()
+
+        if new_w != target_w or new_h != target_h:
+            letterbox_buf.fill(114)
+
+        resized_view = letterbox_buf[pad_h : pad_h + new_h, pad_w : pad_w + new_w]
         cv2.resize(
             image,
             (new_w, new_h),
-            dst=buffer[top : top + new_h, left : left + new_w],
+            dst=resized_view,
             interpolation=cv2.INTER_LINEAR,
         )
 
-        rgb = buffer[:, :, ::-1].transpose(2, 0, 1)
-        np.multiply(rgb, 1.0 / 255.0, out=blob_buffer[0], casting="unsafe")
+        np.multiply(letterbox_buf[:, :, 2], 1.0 / 255.0, out=blob_buffer[0, 0])
+        np.multiply(letterbox_buf[:, :, 1], 1.0 / 255.0, out=blob_buffer[0, 1])
+        np.multiply(letterbox_buf[:, :, 0], 1.0 / 255.0, out=blob_buffer[0, 2])
 
-        return blob_buffer, scale, left, top
+        return blob_buffer, scale, (pad_w, pad_h)
 
-    def detect_faces(self, image, conf_threshold=0.32, iou_threshold=0.45):
-        if image is None or image.size == 0:
-            return []
+    def postprocess(
+        self,
+        outputs: List[np.ndarray],
+        orig_shape: Tuple[int, int],
+        scale: float,
+        pad: Tuple[int, int],
+        conf_threshold: Optional[float] = None,
+    ) -> List[Dict]:
+        """
+        Postprocess YOLOv12 outputs to extract face bounding boxes.
 
-        img_h, img_w = image.shape[:2]
-        blob, scale, pad_left, pad_top = self._preprocess(image)
+        Args:
+            outputs: Raw model outputs
+            orig_shape: Original image (height, width)
+            scale: Letterbox scale factor
+            pad: Letterbox (pad_w, pad_h)
+            conf_threshold: Optional confidence override for thread-safe calls
 
-        raw_output = self.session.run(None, {self.input_name: blob})[0]
+        Returns:
+            List of detection dictionaries with keys: x1, y1, x2, y2, w, h, confidence
+        """
+        thresh = (
+            self.conf_threshold if conf_threshold is None else float(conf_threshold)
+        )
+        predictions = np.squeeze(outputs[0])
 
-        predictions = np.squeeze(raw_output)
         if predictions.ndim == 2 and predictions.shape[0] < predictions.shape[1]:
             predictions = predictions.T
 
-        scores = (
-            np.max(predictions[:, 4:], axis=1) if predictions.shape[1] > 5 else predictions[:, 4]
-        )
-
-        valid_mask = scores >= conf_threshold
-        predictions = predictions[valid_mask]
-        scores = scores[valid_mask]
-
-        if len(predictions) == 0:
+        if predictions.ndim != 2 or predictions.shape[1] < 5:
             return []
 
-        cx = (predictions[:, 0] - pad_left) / scale
-        cy = (predictions[:, 1] - pad_top) / scale
-        w = predictions[:, 2] / scale
-        h = predictions[:, 3] / scale
+        scores = predictions[:, 4]
+        mask = scores >= thresh
+        if not np.any(mask):
+            return []
 
-        x1 = cx - w / 2.0
-        y1 = cy - h / 2.0
+        filtered_preds = predictions[mask]
+        filtered_scores = scores[mask]
 
-        nms_boxes = np.column_stack((x1, y1, w, h)).tolist()
-        indices = cv2.dnn.NMSBoxes(nms_boxes, scores.tolist(), conf_threshold, iou_threshold)
+        cx = filtered_preds[:, 0]
+        cy = filtered_preds[:, 1]
+        w = filtered_preds[:, 2]
+        h = filtered_preds[:, 3]
+
+        pad_w, pad_h = pad
+        orig_h, orig_w = orig_shape
+
+        x1 = (cx - w * 0.5 - pad_w) / scale
+        y1 = (cy - h * 0.5 - pad_h) / scale
+        x2 = (cx + w * 0.5 - pad_w) / scale
+        y2 = (cy + h * 0.5 - pad_h) / scale
+
+        np.clip(x1, 0, orig_w, out=x1)
+        np.clip(y1, 0, orig_h, out=y1)
+        np.clip(x2, 0, orig_w, out=x2)
+        np.clip(y2, 0, orig_h, out=y2)
+
+        box_w = x2 - x1
+        box_h = y2 - y1
+
+        nms_boxes = np.column_stack((x1, y1, box_w, box_h)).tolist()
+        score_list = filtered_scores.tolist()
+
+        indices = cv2.dnn.NMSBoxes(
+            nms_boxes, score_list, thresh, self.iou_threshold
+        )
 
         detections = []
         if len(indices) > 0:
-            for idx in np.array(indices).flatten():
-                bx1 = int(max(0, min(img_w, round(x1[idx]))))
-                by1 = int(max(0, min(img_h, round(y1[idx]))))
-                bw = int(round(w[idx]))
-                bh = int(round(h[idx]))
-                bx2 = int(max(0, min(img_w, bx1 + bw)))
-                by2 = int(max(0, min(img_h, by1 + bh)))
-
+            flat_indices = (
+                indices.flatten() if isinstance(indices, np.ndarray) else indices
+            )
+            for idx in flat_indices:
+                ix1 = int(round(x1[idx]))
+                iy1 = int(round(y1[idx]))
+                ix2 = int(round(x2[idx]))
+                iy2 = int(round(y2[idx]))
+                iw = max(1, ix2 - ix1)
+                ih = max(1, iy2 - iy1)
                 detections.append(
                     {
-                        "x1": bx1,
-                        "y1": by1,
-                        "x2": bx2,
-                        "y2": by2,
-                        "confidence": float(scores[idx]),
-                        "w": bx2 - bx1,
-                        "h": by2 - by1,
-                        "cx": (bx1 + bx2) // 2,
-                        "cy": (by1 + by2) // 2,
+                        "x1": ix1,
+                        "y1": iy1,
+                        "x2": ix2,
+                        "y2": iy2,
+                        "w": iw,
+                        "h": ih,
+                        "confidence": float(filtered_scores[idx]),
                     }
                 )
 
         return detections
 
-    def draw_faces(self, image, detections, show_conf=True, blur_faces=False, inplace=False):
-        result = image if inplace else image.copy()
+    def detect_faces(
+        self, image: np.ndarray, conf_threshold: Optional[float] = None
+    ) -> List[Dict]:
+        """
+        Detect faces in a single BGR image.
+
+        Args:
+            image: Input BGR image
+            conf_threshold: Optional confidence threshold override
+
+        Returns:
+            List of face detection dictionaries
+        """
+        if image is None or image.size == 0:
+            return []
+
+        orig_shape = image.shape[:2]
+        input_tensor, scale, pad = self.preprocess(image)
+        outputs = self.session.run(self.output_names, {self.input_name: input_tensor})
+        return self.postprocess(
+            outputs, orig_shape, scale, pad, conf_threshold=conf_threshold
+        )
+
+    def draw_faces(
+        self,
+        image: np.ndarray,
+        detections: List[Dict],
+        color: Tuple[int, int, int] = (0, 255, 0),
+        thickness: int = 2,
+        show_confidence: bool = True,
+        blur_faces: bool = False,
+        inplace: bool = False,
+    ) -> np.ndarray:
+        """
+        Draw bounding boxes or apply privacy blur on detected faces.
+
+        Args:
+            image: Input BGR image
+            detections: List of detections from detect_faces()
+            color: Box color in BGR
+            thickness: Line thickness
+            show_confidence: Whether to draw confidence score label
+            blur_faces: Whether to anonymize/blur faces instead of drawing boxes
+            inplace: Modify the input image directly without copying (faster for video)
+
+        Returns:
+            Annotated BGR image
+        """
+        output = image if inplace else image.copy()
+        if not detections:
+            return output
+
+        img_h, img_w = output.shape[:2]
 
         for det in detections:
-            x1, y1 = det["x1"], det["y1"]
-            x2, y2 = det["x2"], det["y2"]
-            conf = det["confidence"]
+            x1 = max(0, min(img_w - 1, det["x1"]))
+            y1 = max(0, min(img_h - 1, det["y1"]))
+            x2 = max(0, min(img_w, det["x2"]))
+            y2 = max(0, min(img_h, det["y2"]))
+
+            if x2 <= x1 or y2 <= y1:
+                continue
 
             if blur_faces:
-                face_roi = result[y1:y2, x1:x2]
-                if face_roi.size > 0:
-                    blur_w = max(15, (x2 - x1) // 3 | 1)
-                    blur_h = max(15, (y2 - y1) // 3 | 1)
-                    result[y1:y2, x1:x2] = cv2.GaussianBlur(face_roi, (blur_w, blur_h), 30)
+                face_roi = output[y1:y2, x1:x2]
+                roi_h, roi_w = face_roi.shape[:2]
+                if roi_w >= 16 and roi_h >= 16:
+                    small_w = max(2, roi_w // 8)
+                    small_h = max(2, roi_h // 8)
+                    small = cv2.resize(
+                        face_roi, (small_w, small_h), interpolation=cv2.INTER_LINEAR
+                    )
+                    small = cv2.GaussianBlur(small, (5, 5), 0)
+                    cv2.resize(
+                        small,
+                        (roi_w, roi_h),
+                        dst=face_roi,
+                        interpolation=cv2.INTER_LINEAR,
+                    )
+                elif roi_w > 0 and roi_h > 0:
+                    output[y1:y2, x1:x2] = cv2.GaussianBlur(face_roi, (15, 15), 0)
             else:
-                color = (0, 255, 0) if conf > 0.7 else (0, 165, 255)
-                cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
+                cv2.rectangle(output, (x1, y1), (x2, y2), color, thickness)
 
-                if show_conf:
-                    label = f"Face {conf:.2f}"
-                    label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                if show_confidence:
+                    conf_text = f"{det['confidence']:.2f}"
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 0.55
+                    font_thick = 2
+                    (text_w, text_h), baseline = cv2.getTextSize(
+                        conf_text, font, font_scale, font_thick
+                    )
+
+                    label_y1 = max(0, y1 - text_h - baseline - 6)
+                    label_y2 = label_y1 + text_h + baseline + 6
+                    label_x2 = min(img_w, x1 + text_w + 8)
+
                     cv2.rectangle(
-                        result,
-                        (x1, y1 - label_size[1] - 10),
-                        (x1 + label_size[0], y1),
-                        color,
-                        -1,
+                        output, (x1, label_y1), (label_x2, label_y2), color, -1
                     )
                     cv2.putText(
-                        result,
-                        label,
-                        (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (255, 255, 255),
-                        2,
+                        output,
+                        conf_text,
+                        (x1 + 4, label_y2 - baseline - 3),
+                        font,
+                        font_scale,
+                        (0, 0, 0),
+                        font_thick,
+                        cv2.LINE_AA,
                     )
 
-        info = f"Faces: {len(detections)} (YOLOv12 ONNX INT8)"
-        cv2.putText(result, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-        return result
+        return output
 
-    def get_face_crops(self, image, detections, padding=10):
+    def get_face_crops(
+        self, image: np.ndarray, detections: List[Dict], padding: int = 20
+    ) -> List[Dict]:
+        """
+        Extract cropped face images with optional padding.
+
+        Args:
+            image: Input BGR image
+            detections: List of face detections
+            padding: Pixel padding around each face box
+
+        Returns:
+            List of dicts containing cropped 'image', 'confidence', and 'bbox'
+        """
         crops = []
-        h, w = image.shape[:2]
+        img_h, img_w = image.shape[:2]
 
         for det in detections:
             x1 = max(0, det["x1"] - padding)
             y1 = max(0, det["y1"] - padding)
-            x2 = min(w, det["x2"] + padding)
-            y2 = min(h, det["y2"] + padding)
+            x2 = min(img_w, det["x2"] + padding)
+            y2 = min(img_h, det["y2"] + padding)
 
-            crop = image[y1:y2, x1:x2]
-            if crop.size > 0:
-                crops.append(crop)
+            if x2 > x1 and y2 > y1:
+                face_crop = image[y1:y2, x1:x2].copy()
+                crops.append(
+                    {
+                        "image": face_crop,
+                        "confidence": det["confidence"],
+                        "bbox": (x1, y1, x2, y2),
+                    }
+                )
 
         return crops
 
+    @staticmethod
+    def _interpolate_detections(
+        prev_dets: List[Dict], next_dets: List[Dict], alpha: float
+    ) -> List[Dict]:
+        """
+        Linearly interpolate bounding boxes between two keyframes using center matching.
+        """
+        if not next_dets:
+            return []
+        if not prev_dets or alpha >= 1.0:
+            return next_dets
+        if alpha <= 0.0:
+            return prev_dets
 
-def _compute_iou(boxA: Dict[str, Any], boxB: Dict[str, Any]) -> float:
-    xA = max(int(boxA["x1"]), int(boxB["x1"]))
-    yA = max(int(boxA["y1"]), int(boxB["y1"]))
-    xB = min(int(boxA["x2"]), int(boxB["x2"]))
-    yB = min(int(boxA["y2"]), int(boxB["y2"]))
+        interpolated = []
+        used_prev = set()
 
-    inter_w = max(0, xB - xA)
-    inter_h = max(0, yB - yA)
-    inter_area = inter_w * inter_h
-    if inter_area == 0:
-        return 0.0
+        for nd in next_dets:
+            ncx = (nd["x1"] + nd["x2"]) * 0.5
+            ncy = (nd["y1"] + nd["y2"]) * 0.5
+            max_dist_sq = max(nd["w"], nd["h"]) ** 2 * 2.25
 
-    areaA = max(1, int(boxA["w"]) * int(boxA["h"]))
-    areaB = max(1, int(boxB["w"]) * int(boxB["h"]))
-    return float(inter_area) / float(areaA + areaB - inter_area)
+            best_idx = -1
+            best_dist_sq = float("inf")
+
+            for i, pd in enumerate(prev_dets):
+                if i in used_prev:
+                    continue
+                pcx = (pd["x1"] + pd["x2"]) * 0.5
+                pcy = (pd["y1"] + pd["y2"]) * 0.5
+                dist_sq = (ncx - pcx) ** 2 + (ncy - pcy) ** 2
+                if dist_sq < best_dist_sq and dist_sq <= max_dist_sq:
+                    best_dist_sq = dist_sq
+                    best_idx = i
+
+            if best_idx != -1:
+                used_prev.add(best_idx)
+                pd = prev_dets[best_idx]
+                ix1 = int(round(pd["x1"] + alpha * (nd["x1"] - pd["x1"])))
+                iy1 = int(round(pd["y1"] + alpha * (nd["y1"] - pd["y1"])))
+                ix2 = int(round(pd["x2"] + alpha * (nd["x2"] - pd["x2"])))
+                iy2 = int(round(pd["y2"] + alpha * (nd["y2"] - pd["y2"])))
+                icf = float(pd["confidence"] + alpha * (nd["confidence"] - pd["confidence"]))
+                interpolated.append(
+                    {
+                        "x1": ix1,
+                        "y1": iy1,
+                        "x2": ix2,
+                        "y2": iy2,
+                        "w": max(1, ix2 - ix1),
+                        "h": max(1, iy2 - iy1),
+                        "confidence": icf,
+                    }
+                )
+            else:
+                interpolated.append(nd)
+
+        return interpolated
+
+    def detect_from_video(
+        self,
+        video_path: str,
+        output_path: Optional[str] = None,
+        show_preview: bool = True,
+        blur_faces: bool = False,
+        progress_callback=None,
+        frame_stride: int = 4,
+    ) -> Dict:
+        """
+        Process a video file with 3-stage async pipeline, ring-buffer memory reuse,
+        and motion-gated adaptive inference stride.
+        """
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise ValueError(f"Could not open video: {video_path}")
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_stride = max(1, int(frame_stride))
+
+        ffmpeg_proc = None
+        out_cv2 = None
+
+        if output_path:
+            ffmpeg_bin = shutil.which("ffmpeg")
+            if ffmpeg_bin:
+                cmd = [
+                    ffmpeg_bin,
+                    "-y",
+                    "-f",
+                    "rawvideo",
+                    "-vcodec",
+                    "rawvideo",
+                    "-s",
+                    f"{width}x{height}",
+                    "-pix_fmt",
+                    "bgr24",
+                    "-r",
+                    str(fps),
+                    "-i",
+                    "-",
+                    "-an",
+                    "-vcodec",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    str(output_path),
+                ]
+                try:
+                    ffmpeg_proc = subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception:
+                    ffmpeg_proc = None
+
+            if ffmpeg_proc is None:
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                out_cv2 = cv2.VideoWriter(
+                    str(output_path), fourcc, fps, (width, height)
+                )
+
+        num_slots = 3
+        slot_buffers = [
+            [np.empty((height, width, 3), dtype=np.uint8) for _ in range(frame_stride)]
+            for _ in range(num_slots)
+        ]
+
+        free_slots_q: queue.Queue = queue.Queue()
+        for s_idx in range(num_slots):
+            free_slots_q.put(s_idx)
+
+        decode_q: queue.Queue = queue.Queue(maxsize=2)
+        encode_q: queue.Queue = queue.Queue(maxsize=2)
+        stop_event = threading.Event()
+        writer_errors: List[Exception] = []
+
+        def _reader_worker():
+            try:
+                while not stop_event.is_set():
+                    slot_idx = free_slots_q.get()
+                    if slot_idx is None:
+                        break
+
+                    buffers = slot_buffers[slot_idx]
+                    valid_count = 0
+
+                    for i in range(frame_stride):
+                        ret, frm = cap.read(buffers[i])
+                        if not ret:
+                            break
+                        if frm is not buffers[i]:
+                            if frm.shape[:2] != (height, width):
+                                cv2.resize(
+                                    frm, (width, height), dst=buffers[i]
+                                )
+                            else:
+                                np.copyto(buffers[i], frm)
+                        valid_count += 1
+
+                    if valid_count == 0:
+                        free_slots_q.put(slot_idx)
+                        decode_q.put(None)
+                        break
+
+                    decode_q.put((slot_idx, valid_count))
+            except Exception as e:
+                writer_errors.append(e)
+                decode_q.put(None)
+
+        def _writer_worker():
+            try:
+                while True:
+                    item = encode_q.get()
+                    if item is None:
+                        break
+                    slot_idx, valid_count = item
+                    buffers = slot_buffers[slot_idx]
+
+                    for i in range(valid_count):
+                        frame_arr = buffers[i]
+                        if ffmpeg_proc is not None and ffmpeg_proc.stdin is not None:
+                            # Zero-copy memoryview write directly to FFmpeg pipe
+                            ffmpeg_proc.stdin.write(memoryview(frame_arr))
+                        elif out_cv2 is not None:
+                            out_cv2.write(frame_arr)
+
+                    free_slots_q.put(slot_idx)
+            except Exception as e:
+                writer_errors.append(e)
+                stop_event.set()
+
+        reader_thread = threading.Thread(target=_reader_worker, daemon=True)
+        writer_thread = threading.Thread(target=_writer_worker, daemon=True)
+        reader_thread.start()
+        writer_thread.start()
+
+        frame_count = 0
+        total_detections = 0
+        max_faces = 0
+        start_time = time.time()
+
+        prev_dets: Optional[List[Dict]] = None
+        prev_thumb: Optional[np.ndarray] = None
+        skipped_chunks = 0
+        max_skip_chunks = 3 
+
+        try:
+            while not stop_event.is_set():
+                item = decode_q.get()
+                if item is None:
+                    break
+
+                slot_idx, chunk_len = item
+                buffers = slot_buffers[slot_idx]
+
+                if prev_dets is None:
+                    first_frame = buffers[0]
+                    prev_dets = self.detect_faces(first_frame)
+                    prev_thumb = cv2.resize(
+                        cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY),
+                        (32, 32),
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+
+                if chunk_len == 1:
+                    next_dets = prev_dets
+                else:
+                    last_frame = buffers[chunk_len - 1]
+                    curr_thumb = cv2.resize(
+                        cv2.cvtColor(last_frame, cv2.COLOR_BGR2GRAY),
+                        (32, 32),
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+                    motion_diff = float(cv2.absdiff(curr_thumb, prev_thumb).mean())
+
+                    if motion_diff < 1.2 and skipped_chunks < max_skip_chunks:
+                        next_dets = prev_dets
+                        skipped_chunks += 1
+                    else:
+                        next_dets = self.detect_faces(last_frame)
+                        prev_thumb = curr_thumb
+                        skipped_chunks = 0
+
+                both_empty = (not prev_dets) and (not next_dets)
+
+                for i in range(chunk_len):
+                    frm = buffers[i]
+                    if both_empty:
+                        dets = []
+                    else:
+                        alpha = (i + 1) / chunk_len
+                        dets = (
+                            self._interpolate_detections(prev_dets, next_dets, alpha)
+                            if i < chunk_len - 1
+                            else next_dets
+                        )
+                        if dets:
+                            self.draw_faces(
+                                frm, dets, blur_faces=blur_faces, inplace=True
+                            )
+
+                    frame_count += 1
+                    num_faces = len(dets)
+                    total_detections += num_faces
+                    if num_faces > max_faces:
+                        max_faces = num_faces
+
+                    if show_preview:
+                        cv2.imshow("YOLOv12 Face Detection - Video", frm)
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            stop_event.set()
+                            break
+
+                prev_dets = next_dets
+
+                if progress_callback:
+                    progress_callback(frame_count, total_frames)
+
+                encode_q.put((slot_idx, chunk_len))
+
+                if stop_event.is_set():
+                    break
+
+        finally:
+            stop_event.set()
+            encode_q.put(None)
+            free_slots_q.put(None)
+            writer_thread.join(timeout=10.0)
+            reader_thread.join(timeout=2.0)
+
+            cap.release()
+            if ffmpeg_proc is not None:
+                try:
+                    if ffmpeg_proc.stdin:
+                        ffmpeg_proc.stdin.close()
+                    ffmpeg_proc.wait(timeout=10.0)
+                except Exception:
+                    ffmpeg_proc.kill()
+            if out_cv2 is not None:
+                out_cv2.release()
+            if show_preview:
+                cv2.destroyAllWindows()
+
+        if writer_errors:
+            raise writer_errors[0]
+
+        elapsed = max(time.time() - start_time, 1e-6)
+        avg_fps = frame_count / elapsed
+        avg_faces = total_detections / frame_count if frame_count > 0 else 0.0
+
+        return {
+            "total_frames": frame_count,
+            "total_detections": total_detections,
+            "avg_faces_per_frame": float(avg_faces),
+            "max_faces_in_frame": max_faces,
+            "fps": float(avg_fps),
+        }
+
+    def detect_from_webcam(self, camera_id: int = 0, blur_faces: bool = False):
+        """Run real-time face detection on local webcam stream."""
+        cap = cv2.VideoCapture(camera_id)
+        if not cap.isOpened():
+            raise ValueError(f"Could not open webcam with ID: {camera_id}")
+
+        print("Starting webcam detection... Press 'q' to quit.")
+        prev_time = time.time()
+
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                detections = self.detect_faces(frame)
+                self.draw_faces(
+                    frame, detections, blur_faces=blur_faces, inplace=True
+                )
+
+                curr_time = time.time()
+                fps = 1.0 / max(curr_time - prev_time, 1e-6)
+                prev_time = curr_time
+
+                cv2.putText(
+                    frame,
+                    f"FPS: {fps:.1f} | Faces: {len(detections)}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2,
+                )
+
+                cv2.imshow("YOLOv12 Real-time Face Detection", frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
 
 
-def _interpolate_detections(
-    dets_start: List[Dict[str, Any]],
-    dets_end: List[Dict[str, Any]],
-    alpha: float,
-    iou_match_thresh: float = 0.25,
-) -> List[Dict[str, Any]]:
-    if not dets_start:
-        return dets_end if alpha > 0.5 else []
-    if not dets_end:
-        return dets_start if alpha <= 0.5 else []
-
-    interpolated = []
-    used_end = set()
-
-    for d_start in dets_start:
-        best_iou = 0.0
-        best_idx = -1
-        for idx, d_end in enumerate(dets_end):
-            if idx in used_end:
-                continue
-            iou = _compute_iou(d_start, d_end)
-            if iou > best_iou:
-                best_iou = iou
-                best_idx = idx
-
-        if best_idx != -1 and best_iou >= iou_match_thresh:
-            used_end.add(best_idx)
-            d_end = dets_end[best_idx]
-            x1 = int(round((1.0 - alpha) * d_start["x1"] + alpha * d_end["x1"]))
-            y1 = int(round((1.0 - alpha) * d_start["y1"] + alpha * d_end["y1"]))
-            x2 = int(round((1.0 - alpha) * d_start["x2"] + alpha * d_end["x2"]))
-            y2 = int(round((1.0 - alpha) * d_start["y2"] + alpha * d_end["y2"]))
-            conf = (1.0 - alpha) * d_start["confidence"] + alpha * d_end["confidence"]
-            interpolated.append(
-                {
-                    "x1": x1,
-                    "y1": y1,
-                    "x2": x2,
-                    "y2": y2,
-                    "w": x2 - x1,
-                    "h": y2 - y1,
-                    "cx": (x1 + x2) // 2,
-                    "cy": (y1 + y2) // 2,
-                    "confidence": conf,
-                }
-            )
-        elif alpha <= 0.5:
-            interpolated.append(d_start)
-
-    return interpolated
-
-
-def detect_from_image(image_path, model_path, output_path=None, conf_threshold=0.32):
-    image = cv2.imread(str(image_path))
-    if image is None:
-        return []
-
-    detector = YOLOv12FaceDetector(model_path)
-    detections = detector.detect_faces(image, conf_threshold)
-    result = detector.draw_faces(image, detections, inplace=True)
-
-    if output_path:
-        cv2.imwrite(str(output_path), result)
-
-    return detections
-
-
-def detect_from_video(
-    video_path,
-    model_path,
-    output_path=None,
-    conf_threshold=0.32,
-    frame_stride=4,
-    max_dimension=1280,
-    blur_faces=False,
-    progress_callback=None,
-):
-    """
-    - Adaptive Frame Stride vs Linear Box Interpolation.
-    - Zero-temp-file streaming directly through FFmpeg Stdin Pipe.
-    """
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        return
-
-    orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-
-    scale_factor = 1.0
-    if max(orig_w, orig_h) > max_dimension:
-        scale_factor = max_dimension / float(max(orig_w, orig_h))
-    out_w = int(round(orig_w * scale_factor)) // 2 * 2
-    out_h = int(round(orig_h * scale_factor)) // 2 * 2
-    need_resize = (out_w != orig_w) or (out_h != orig_h)
-
-    if isinstance(model_path, YOLOv12FaceDetector):
-        detector = model_path
-    else:
-        detector = YOLOv12FaceDetector(model_path)
-
-    ffmpeg_proc = None
-    cv_writer = None
-
-    if output_path:
-        if shutil.which("ffmpeg"):
-            ffmpeg_cmd = [
-                "ffmpeg",
-                "-y",
-                "-f",
-                "rawvideo",
-                "-vcodec",
-                "rawvideo",
-                "-s",
-                f"{out_w}x{out_h}",
-                "-pix_fmt",
-                "bgr24",
-                "-r",
-                str(fps),
-                "-i",
-                "-",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "ultrafast",
-                "-crf",
-                "26",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                str(output_path),
-            ]
-            ffmpeg_proc = subprocess.Popen(
-                ffmpeg_cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        else:
-            cv_writer = cv2.VideoWriter(
-                str(output_path),
-                cv2.VideoWriter_fourcc(*"mp4v"),
-                fps,
-                (out_w, out_h),
-            )
-
-    def _read_and_prepare():
-        ret, frm = cap.read()
-        if not ret:
-            return None
-        if need_resize:
-            frm = cv2.resize(frm, (out_w, out_h), interpolation=cv2.INTER_AREA)
-        return frm
-
-    def _write_frame(frm: np.ndarray):
-        if ffmpeg_proc and ffmpeg_proc.stdin:
-            ffmpeg_proc.stdin.write(frm.tobytes())
-        elif cv_writer:
-            cv_writer.write(frm)
-
-    prev_frame = _read_and_prepare()
-    if prev_frame is None:
-        cap.release()
-        return
-
-    show_conf = not blur_faces
-    prev_dets = detector.detect_faces(prev_frame, conf_threshold)
-    detector.draw_faces(
-        prev_frame, prev_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True
+def main():
+    """CLI Entry point."""
+    parser = argparse.ArgumentParser(
+        description="Human Face Detection using YOLOv12 ONNX"
     )
-    _write_frame(prev_frame)
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="image",
+        choices=["image", "video", "webcam"],
+        help="Detection mode: image, video, or webcam",
+    )
+    parser.add_argument(
+        "--input", type=str, help="Path to input image or video file"
+    )
+    parser.add_argument(
+        "--output", type=str, help="Path to save output image or video"
+    )
+    parser.add_argument(
+        "--camera", type=int, default=0, help="Camera ID for webcam mode"
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="models/yolov12n-face.onnx",
+        help="Path to ONNX model",
+    )
+    parser.add_argument(
+        "--conf", type=float, default=0.5, help="Confidence threshold"
+    )
+    parser.add_argument(
+        "--iou", type=float, default=0.45, help="IoU threshold for NMS"
+    )
+    parser.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="Disable GUI preview window",
+    )
+    parser.add_argument(
+        "--blur",
+        action="store_true",
+        help="Blur detected faces (privacy mode)",
+    )
 
-    processed_count = 1
-    if progress_callback:
-        progress_callback(processed_count, total_frames)
+    args = parser.parse_args()
 
-    while True:
-        chunk_frames = []
-        for _ in range(frame_stride):
-            frm = _read_and_prepare()
-            if frm is None:
-                break
-            chunk_frames.append(frm)
+    detector = YOLOv12FaceDetector(
+        model_path=args.model,
+        conf_threshold=args.conf,
+        iou_threshold=args.iou,
+    )
 
-        if not chunk_frames:
-            break
+    if args.mode == "image":
+        if not args.input:
+            parser.error("--input is required for image mode")
+        image = cv2.imread(args.input)
+        if image is None:
+            raise ValueError(f"Failed to load image: {args.input}")
 
-        last_frame = chunk_frames[-1]
-        next_dets = detector.detect_faces(last_frame, conf_threshold)
-
-        chunk_len = len(chunk_frames)
-        for i in range(chunk_len - 1):
-            alpha = float(i + 1) / float(chunk_len)
-            interp_dets = _interpolate_detections(prev_dets, next_dets, alpha)
-            detector.draw_faces(
-                chunk_frames[i],
-                interp_dets,
-                show_conf=show_conf,
-                blur_faces=blur_faces,
-                inplace=True,
-            )
-            _write_frame(chunk_frames[i])
-
-        detector.draw_faces(
-            last_frame, next_dets, show_conf=show_conf, blur_faces=blur_faces, inplace=True
+        detections = detector.detect_faces(image)
+        output_img = detector.draw_faces(
+            image, detections, blur_faces=args.blur
         )
-        _write_frame(last_frame)
+        print(f"Detected {len(detections)} face(s).")
 
-        prev_dets = next_dets
+        if args.output:
+            cv2.imwrite(args.output, output_img)
+            print(f"Saved output image to: {args.output}")
 
-        processed_count += chunk_len
-        if progress_callback:
-            progress_callback(processed_count, total_frames)
+        if not args.no_preview:
+            cv2.imshow("YOLOv12 Face Detection", output_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
-    cap.release()
-    if ffmpeg_proc and ffmpeg_proc.stdin:
-        ffmpeg_proc.stdin.close()
-        ffmpeg_proc.wait()
-    if cv_writer:
-        cv_writer.release()
+    elif args.mode == "video":
+        if not args.input:
+            parser.error("--input is required for video mode")
+        stats = detector.detect_from_video(
+            video_path=args.input,
+            output_path=args.output,
+            show_preview=not args.no_preview,
+            blur_faces=args.blur,
+        )
+        print("Video Processing Complete:", stats)
+
+    elif args.mode == "webcam":
+        detector.detect_from_webcam(
+            camera_id=args.camera, blur_faces=args.blur
+        )
+
+
+if __name__ == "__main__":
+    main()
