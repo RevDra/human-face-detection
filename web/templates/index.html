@@ -46,7 +46,7 @@
         .file-info-item { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
         .file-name { color: #2e7d32; font-weight: 600; word-break: break-all; }
         .file-size { color: #558b2f; font-size: 0.9em; }
-        .file-preview { max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 10px; cursor: pointer; }
+        .file-preview { max-width: 200px; max-height: 150px; border-radius: 8px; margin-top: 10px; cursor: pointer; display: none; }
         
         .video-container { 
             position: relative; 
@@ -82,7 +82,10 @@
         .btn-secondary { background: #e0e0e0; color: #333; }
         .btn-secondary:hover { background: #d0d0d0; }
         .result-container { display: none; margin-top: 30px; }
-        .result-image { max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 20px; }
+        
+        /* Tối ưu Nhóm 1: Thay thế thẻ img bằng canvas render trực tiếp ở Client */
+        .result-canvas { max-width: 100%; max-height: 600px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto; }
+        
         .detection-stats { background: #f8f9ff; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
         .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
         .stat-row:last-child { border-bottom: none; }
@@ -244,7 +247,7 @@
                     <div class="upload-area" id="imageUploadArea">
                         <input type="file" id="imageFile" accept="image/*" style="display: none;">
                         <p>🖱️ Click to upload or drag & drop</p>
-                        <p style="font-size: 0.9em; margin-top: 5px; opacity: 0.7;">Supported: JPG, PNG, GIF</p>
+                        <p style="font-size: 0.9em; margin-top: 5px; opacity: 0.7;">Supported: JPG, PNG, WEBP</p>
                     </div>
                     <div class="file-info" id="imageFileInfo">
                         <div class="file-info-item">
@@ -253,7 +256,7 @@
                         <div class="file-info-item">
                             <span class="file-size" id="imageFileSize"></span>
                         </div>
-                        <img id="imagePreview" class="file-preview" style="display: none;">
+                        <img id="imagePreview" class="file-preview">
                     </div>
                 </div>
 
@@ -281,7 +284,8 @@
                 </div>
 
                 <div class="result-container" id="imageResult">
-                    <img id="resultImage" class="result-image" alt="Detection Result">
+                    <!-- Tối ưu Nhóm 1: Canvas render hình ảnh & box trực tiếp ở Client -->
+                    <canvas id="resultCanvas" class="result-canvas"></canvas>
 
                     <div id="gallerySection" style="display: none; margin-bottom: 20px;">
                         <h3 style="color: #667eea; margin-bottom: 15px;">👤 Face Gallery</h3>
@@ -701,11 +705,11 @@
                             return;
                         }
                         const formData = new FormData();
-                        formData.append('file', blob, 'webcam.jpg');
+                        formData.append('file', blob, 'webcam.jpg'); // Đảm bảo key là 'file'
                         formData.append('model', model);
-                        formData.append('mode', 'webcam');
+                        formData.append('confidence', '0.5');
                         
-                        const response = await fetch('/api/detect-image', {
+                        const response = await fetch('/api/webcam-frame', {
                             method: 'POST',
                             body: formData
                         });
@@ -716,23 +720,34 @@
                             const elapsed = Math.max(0.001, (Date.now() - startTime) / 1000);
                             const fps = (frameCount / elapsed).toFixed(1);
                             
-                            document.getElementById('webcamFaces').textContent = data.detections.count;
+                            // Đọc đúng cấu trúc trả về từ object detections.count hoặc num_faces
+                            const faceCount = data.num_faces !== undefined ? data.num_faces : (data.detections.count || 0);
+                            document.getElementById('webcamFaces').textContent = faceCount;
                             document.getElementById('webcamFPS').textContent = fps;
                             document.getElementById('webcamDuration').textContent = elapsed.toFixed(1) + 's';
                             
-                            const ratioX = overlayCanvas.clientWidth / data.frame_width;
-                            const ratioY = overlayCanvas.clientHeight / data.frame_height;
+                            const displayWidth = videoEl.clientWidth;
+                            const displayHeight = videoEl.clientHeight;
+                            const nativeWidth = videoEl.videoWidth || 640;
+                            const nativeHeight = videoEl.videoHeight || 480;
                             
-                            targetBoxes = data.detections.boxes.map(b => ({
-                                x1: b.x1 * ratioX,
-                                y1: b.y1 * ratioY,
-                                w: b.w * ratioX,
-                                h: b.h * ratioY,
-                                conf: b.conf
+                            const scale = Math.max(displayWidth / nativeWidth, displayHeight / nativeHeight);
+                            const renderedW = nativeWidth * scale;
+                            const renderedH = nativeHeight * scale;
+                            const offsetX = (displayWidth - renderedW) / 2;
+                            const offsetY = (displayHeight - renderedH) / 2;
+                            
+                            const boxesArr = data.detections.boxes || data.detections;
+                            targetBoxes = boxesArr.map(b => ({
+                                x1: b.x1 * (renderedW / data.frame_width) + offsetX,
+                                y1: b.y1 * (renderedH / data.frame_height) + offsetY,
+                                w: b.w * (renderedW / data.frame_width),
+                                h: b.h * (renderedH / data.frame_height),
+                                conf: b.conf !== undefined ? b.conf : b.confidence
                             }));
                         }
                     } catch (err) {
-                        console.error('Detection fetch error:', err);
+                        console.error('Webcam frame fetch error:', err);
                     } finally {
                         isProcessing = false;
                     }
@@ -803,7 +818,6 @@
     }
     if (localStorage.getItem('theme') === 'dark') toggleDarkMode();
 
-    // Hàm cập nhật thanh tiến trình an toàn, chống NaN và hỗ trợ reset tức thì về 0%
     function setProgressValue(barEl, pctEl, pct, instant = false, customLabel = null) {
         const numericPct = Number.isFinite(Number(pct)) ? Math.max(0, Math.min(100, Math.round(Number(pct)))) : 0;
         const textToShow = customLabel !== null ? customLabel : `${numericPct}%`;
@@ -812,7 +826,7 @@
             barEl.style.transition = 'none';
             barEl.style.width = `${numericPct}%`;
             pctEl.textContent = textToShow;
-            void barEl.offsetHeight; // Ép reflow tức thì để không bị hiệu ứng tụt lùi
+            void barEl.offsetHeight;
             barEl.style.transition = 'width 0.3s ease';
         } else {
             barEl.style.width = `${numericPct}%`;
@@ -833,7 +847,104 @@
         }
     }
 
-    // ==================== IMAGE DETECTION (2-STAGE: UPLOAD -> RESET -> INFERENCE) ====================
+    // ==================== HƯỚNG 1 & 3: TỐI ƯU IMAGE DETECTION VỚI CLIENT CANVAS & COMPRESSION ====================
+    async function compressImageBeforeUpload(file, maxDim = 1920, quality = 0.85) {
+        const bitmap = await createImageBitmap(file);
+        const { width, height } = bitmap;
+
+        if (Math.max(width, height) <= maxDim && file.size <= 1.5 * 1024 * 1024) {
+            return { uploadBlob: file, bitmap };
+        }
+
+        const scale = Math.min(1, maxDim / Math.max(width, height));
+        const targetW = Math.round(width * scale);
+        const targetH = Math.round(height * scale);
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = targetW;
+        offCanvas.height = targetH;
+        const offCtx = offCanvas.getContext('2d');
+        offCtx.drawImage(bitmap, 0, 0, targetW, targetH);
+
+        const uploadBlob = await new Promise((resolve) => {
+            offCanvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', quality);
+        });
+
+        bitmap.close();
+        const resizedBitmap = await createImageBitmap(offCanvas);
+        return { uploadBlob, bitmap: resizedBitmap };
+    }
+
+    function renderClientSideDetections(bitmap, detections, blurFaces) {
+        const canvas = document.getElementById('resultCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        ctx.drawImage(bitmap, 0, 0);
+
+        const scaleFactor = Math.max(1, Math.min(bitmap.width, bitmap.height) / 640);
+        const lineWidth = Math.max(2, Math.round(2.5 * scaleFactor));
+        const fontSize = Math.max(12, Math.round(14 * scaleFactor));
+        ctx.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+
+        const gallery = document.getElementById('cropsContainer');
+        const gallerySection = document.getElementById('gallerySection');
+        gallery.innerHTML = '';
+
+        if (detections && detections.length > 0) {
+            gallerySection.style.display = 'block';
+        } else {
+            gallerySection.style.display = 'none';
+        }
+
+        detections.forEach((det) => {
+            const { x1, y1, w, h, confidence } = det;
+            const confPct = (confidence * 100).toFixed(1) + '%';
+
+            // Trích xuất Face Gallery trực tiếp bằng Canvas tại Client
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = 64;
+            cropCanvas.height = 64;
+            cropCanvas.style.cssText = 'width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 2px solid #667eea; box-shadow: 0 2px 6px rgba(0,0,0,0.12); display: block;';
+            const cropCtx = cropCanvas.getContext('2d');
+
+            if (blurFaces) {
+                cropCtx.filter = 'blur(6px)';
+            }
+            cropCtx.drawImage(bitmap, x1, y1, w, h, 0, 0, 64, 64);
+            cropCtx.filter = 'none';
+            gallery.appendChild(cropCanvas);
+
+            // Xử lý vẽ Privacy Mode (Blur) hoặc Bounding Box
+            if (blurFaces) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(x1, y1, w, h);
+                ctx.clip();
+                const blurRadius = Math.max(12, Math.round(Math.min(w, h) / 6));
+                ctx.filter = `blur(${blurRadius}px)`;
+                ctx.drawImage(bitmap, 0, 0);
+                ctx.restore();
+            } else {
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = lineWidth;
+                ctx.strokeRect(x1, y1, w, h);
+
+                const textMetrics = ctx.measureText(confPct);
+                const pad = 4 * scaleFactor;
+                const labelH = fontSize + pad * 2;
+                const labelY = Math.max(0, y1 - labelH);
+
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(x1, labelY, textMetrics.width + pad * 2, labelH);
+
+                ctx.fillStyle = '#000000';
+                ctx.fillText(confPct, x1 + pad, labelY + fontSize + pad / 2 - 2);
+            }
+        });
+    }
+
     let imageInferTimer = null;
 
     async function detectImage() {
@@ -846,11 +957,6 @@
             clearInterval(imageInferTimer);
             imageInferTimer = null;
         }
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('model', model);
-        formData.append('blur', blur);
 
         const btn = document.getElementById('detectImageBtn');
         const progressBox = document.getElementById('imageProgress');
@@ -865,7 +971,7 @@
         progressBox.style.display = 'block';
         progressBar.classList.remove('progress-bar-animated');
         setProgressValue(progressBar, progressPercent, 0, true);
-        progressStatus.textContent = '📤 Phase 1/2: Uploading image to server...';
+        progressStatus.textContent = '📤 Phase 1/2: Optimizing & Uploading image...';
         if (metaLeft) metaLeft.textContent = 'Uploaded: 0.00 / -- MB';
         if (metaMid) metaMid.textContent = 'Speed: -- MB/s';
         if (metaRight) metaRight.textContent = 'ETA: --';
@@ -873,14 +979,25 @@
         document.getElementById('imageResult').style.display = 'none';
         showMessage('imageMessage', '', 'info');
 
+        let imageBitmap = null;
         const uploadStartTime = performance.now();
 
         try {
+            // Hướng 3: Nén ảnh ở client
+            const { uploadBlob, bitmap } = await compressImageBeforeUpload(file, 1920, 0.85);
+            imageBitmap = bitmap;
+
+            const formData = new FormData();
+            formData.append('image', uploadBlob, file.name);
+            formData.append('model', model);
+            formData.append('blur_faces', blur);
+            formData.append('confidence', document.getElementById('imageModel').value ? '0.5' : '0.5');
+            formData.append('return_mode', 'coords'); // Hướng 1: Chỉ nhận tọa độ JSON nhẹ
+
             const data = await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 let lastUiUpdate = 0;
 
-                // GIAI ĐOẠN 1: THEO DÕI TIẾN ĐỘ TẢI ẢNH LÊN (0% -> 100%)
                 xhr.upload.addEventListener('progress', (e) => {
                     if (e.lengthComputable && e.total > 0) {
                         const now = performance.now();
@@ -895,17 +1012,13 @@
                         const safeSpeed = Number.isFinite(speedMBps) ? speedMBps : 0;
                         const loadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
                         const totalMB = (e.total / (1024 * 1024)).toFixed(2);
-                        const remainingMB = Math.max(0, (e.total - e.loaded) / (1024 * 1024));
-                        const etaSec = safeSpeed > 0.01 ? Math.ceil(remainingMB / safeSpeed) : 0;
 
                         progressStatus.textContent = '📤 Phase 1/2: Uploading image to server...';
                         if (metaLeft) metaLeft.textContent = `Uploaded: ${loadedMB} / ${totalMB} MB`;
                         if (metaMid) metaMid.textContent = `Speed: ${safeSpeed.toFixed(1)} MB/s`;
-                        if (metaRight) metaRight.textContent = `ETA: ~${etaSec}s`;
                     }
                 });
 
-                // KHI TẢI LÊN HOÀN TẤT -> RESET VỀ 0% VÀ BIẾN THÀNH THANH SUY LUẬN AI (GIAI ĐOẠN 2)
                 xhr.upload.addEventListener('load', () => {
                     setProgressValue(progressBar, progressPercent, 0, true);
                     progressBar.classList.add('progress-bar-animated');
@@ -913,12 +1026,10 @@
                         ? '🕵️ Phase 2/2: Blurring faces with YOLOv12...'
                         : '🔍 Phase 2/2: Running YOLOv12 face inference...';
 
-                    const shortModel = (model || 'yolov12').split('.')[0];
                     if (metaLeft) metaLeft.textContent = 'Stage: AI Inference';
-                    if (metaMid) metaMid.textContent = `Model: ${shortModel}`;
+                    if (metaMid) metaMid.textContent = `Model: ${model}`;
                     if (metaRight) metaRight.textContent = 'Status: Inferring...';
 
-                    // Chạy thanh tiến trình suy luận tăng dần từ 0% -> 90% trong lúc đợi server phản hồi
                     let simulatedPct = 15;
                     setProgressValue(progressBar, progressPercent, simulatedPct, false);
                     imageInferTimer = setInterval(() => {
@@ -939,10 +1050,6 @@
                     try { json = JSON.parse(xhr.responseText); } catch (_) {}
                     if (xhr.status >= 200 && xhr.status < 300 && json.success) {
                         setProgressValue(progressBar, progressPercent, 100, false);
-                        if (json.engine && metaMid) {
-                            metaMid.textContent = `Engine: ${json.engine}`;
-                        }
-                        if (metaRight) metaRight.textContent = 'Status: Completed!';
                         resolve(json);
                     } else {
                         reject(new Error(json.error || `Server error (${xhr.status})`));
@@ -954,7 +1061,6 @@
                         clearInterval(imageInferTimer);
                         imageInferTimer = null;
                     }
-                    progressBar.classList.remove('progress-bar-animated');
                     reject(new Error('Network error during image upload'));
                 };
 
@@ -966,42 +1072,23 @@
             lastModel = model;
             resetRatingForm();
 
-            const detections = data.detections || {};
-            const count = detections.count !== undefined ? detections.count : 0;
-
+            const count = data.num_faces !== undefined ? data.num_faces : 0;
             document.getElementById('faceCount').textContent = count;
-            document.getElementById('resultImage').src = data.image;
 
-            // Hiển thị Face Gallery
-            const gallery = document.getElementById('gallerySection');
-            const container = document.getElementById('cropsContainer');
-            if (gallery && container) {
-                container.innerHTML = '';
-                if (detections.crops && detections.crops.length > 0) {
-                    detections.crops.forEach((cropB64, idx) => {
-                        const img = document.createElement('img');
-                        img.src = `data:image/jpeg;base64,${cropB64}`;
-                        img.title = `Face #${idx + 1}`;
-                        img.style.cssText = 'width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 2px solid #667eea; box-shadow: 0 2px 6px rgba(0,0,0,0.12);';
-                        container.appendChild(img);
-                    });
-                    gallery.style.display = 'block';
-                } else {
-                    gallery.style.display = 'none';
-                }
-            }
+            // Hướng 1: Vẽ trực tiếp lên Canvas tại Client
+            renderClientSideDetections(imageBitmap, data.detections, blur);
 
-            // Hiển thị Detail List (toggleFacesList)
+            // Điền danh sách vào Detail List
             const facesList = document.getElementById('facesList');
             const toggleBtn = document.getElementById('toggleFacesBtn');
             if (facesList && toggleBtn) {
                 facesList.innerHTML = '';
                 facesList.style.display = 'none';
-                if (detections.faces && detections.faces.length > 0) {
-                    detections.faces.forEach((face) => {
+                if (data.detections && data.detections.length > 0) {
+                    data.detections.forEach((face) => {
                         const div = document.createElement('div');
                         div.className = 'face-item';
-                        div.innerHTML = `<strong>Face #${face.id}</strong> — Confidence: ${face.confidence} | Size: ${face.width}×${face.height}px | Pos: ${face.position}`;
+                        div.innerHTML = `<strong>Face #${face.id}</strong> — Confidence: ${(face.confidence * 100).toFixed(1)}% | Size: ${face.w}×${face.h}px | Pos: (${face.x1}, ${face.y1})`;
                         facesList.appendChild(div);
                     });
                     toggleBtn.style.display = 'block';
@@ -1016,29 +1103,24 @@
         } catch (err) {
             showMessage('imageMessage', `Error: ${err.message}`, 'error');
         } finally {
+            if (imageBitmap) imageBitmap.close();
             progressBox.style.display = 'none';
             btn.disabled = false;
         }
     }
 
-    // ==================== VIDEO DETECTION (2-STAGE: UPLOAD -> RESET -> INFERENCE) ====================
-    let videoPollTimer = null;
-  
+    // ==================== HƯỚNG 2: TỐI ƯU VIDEO DETECTION VỚI SERVER-SENT EVENTS (SSE) ====================
     async function detectVideo() {
         const file = document.getElementById('videoFile').files[0];
         const model = document.getElementById('videoModel').value;
         const blur = document.getElementById('videoBlurFaces').checked;
         if (!file) { showMessage('videoMessage', 'Please select a video', 'error'); return; }
 
-        if (videoPollTimer) {
-            clearInterval(videoPollTimer);
-            videoPollTimer = null;
-        }
-      
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('video', file); // Khớp hoàn toàn với request.files['video'] trong web_app.py
         formData.append('model', model);
-        formData.append('blur', blur);
+        formData.append('blur_faces', blur ? 'true' : 'false');
+        formData.append('confidence', '0.5');
 
         const btn = document.getElementById('detectVideoBtn');
         const progressBox = document.getElementById('videoProgress');
@@ -1064,7 +1146,6 @@
         const uploadStartTime = performance.now();
 
         try {
-            // GIAI ĐOẠN 1: THEO DÕI TIẾN ĐỘ TẢI VIDEO LÊN (0% -> 100%)
             const data = await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 let lastUiUpdate = 0;
@@ -1093,13 +1174,12 @@
                     }
                 });
 
-                // KHI TẢI LÊN HOÀN TẤT -> RESET TỨC THÌ VỀ 0% ĐỂ CHUYỂN SANG THANH SUY LUẬN AI
                 xhr.upload.addEventListener('load', () => {
                     setProgressValue(progressBar, progressPercent, 0, true);
-                    progressStatus.textContent = '⏳ Phase 2/2: Upload complete! Starting AI inference...';
+                    progressStatus.textContent = '⏳ Phase 2/2: Upload complete! Connecting real-time stream...';
                     if (metaLeft) metaLeft.textContent = 'Frames: 0 / --';
                     if (metaMid) metaMid.textContent = 'Speed: -- FPS';
-                    if (metaRight) metaRight.textContent = 'ETA: calculating...';
+                    if (metaRight) metaRight.textContent = 'ETA: connecting...';
                 });
 
                 xhr.onload = function () {
@@ -1118,66 +1198,61 @@
                 xhr.send(formData);
             });
 
-            if (!data.job_id && data.download_url) {
-                finishVideoSuccess(file.name, model, data);
-                return;
+            if (!data.job_id) {
+                throw new Error("No job_id returned from server");
             }
 
-            // GIAI ĐOẠN 2: POLLING TIẾN ĐỘ SUY LUẬN VIDEO (0% -> 100%)
-            const jobId = data.job_id;
+            // Kích hoạt thanh tiến trình chuyển sang chế độ AI Inference chạy qua SSE
             setProgressValue(progressBar, progressPercent, 0, true);
             progressBar.classList.add('progress-bar-animated');
-            progressStatus.textContent = '⏳ Phase 2/2: Queued for AI inference...';
 
-            videoPollTimer = setInterval(async () => {
-                try {
-                    const statusRes = await fetch(`/api/video-status/${jobId}`);
-                    const job = await statusRes.json();
+            // Hướng 2: Lắng nghe tiến độ qua Server-Sent Events (SSE)
+            const evtSource = new EventSource('/api/video-stream/' + data.job_id);
 
-                    if (!statusRes.ok || !job.success) {
-                        throw new Error(job.error || 'Lost connection to video job');
-                    }
+            evtSource.onmessage = (event) => {
+                const job = JSON.parse(event.data);
 
-                    const pct = job.progress || 0;
-                    setProgressValue(progressBar, progressPercent, pct, false);
-
-                    if (job.status === 'queued') {
-                        progressStatus.textContent = '⏳ Phase 2/2: Queued (waiting for previous video)...';
-                    } else if (job.status === 'processing') {
-                        progressStatus.textContent = blur
-                            ? '🕵️ Phase 2/2: Blurring faces in video...'
-                            : '🔍 Phase 2/2: Detecting faces in video...';
-                        const totalStr = job.total_frames > 0 ? job.total_frames : '--';
-                        const fpsStr = job.fps > 0 ? `${job.fps} FPS` : '-- FPS';
-                        const etaStr = (job.eta_seconds !== null && job.eta_seconds !== undefined)
-                            ? `${job.eta_seconds}s`
-                            : 'calculating...';
-                        if (metaLeft) metaLeft.textContent = `Frames: ${job.processed_frames || 0} / ${totalStr}`;
-                        if (metaMid) metaMid.textContent = `Speed: ${fpsStr}`;
-                        if (metaRight) metaRight.textContent = `ETA: ~${etaStr}`;
-                    } else if (job.status === 'completed') {
-                        clearInterval(videoPollTimer);
-                        videoPollTimer = null;
-                        progressBar.classList.remove('progress-bar-animated');
-                        setProgressValue(progressBar, progressPercent, 100, false);
-                        finishVideoSuccess(file.name, model, job);
-                    } else if (job.status === 'failed') {
-                        clearInterval(videoPollTimer);
-                        videoPollTimer = null;
-                        progressBar.classList.remove('progress-bar-animated');
-                        progressBox.style.display = 'none';
-                        btn.disabled = false;
-                        showMessage('videoMessage', `Error: ${job.error || 'Video processing failed'}`, 'error');
-                    }
-                } catch (pollErr) {
-                    clearInterval(videoPollTimer);
-                    videoPollTimer = null;
+                if (job.error) {
+                    evtSource.close();
                     progressBar.classList.remove('progress-bar-animated');
                     progressBox.style.display = 'none';
                     btn.disabled = false;
-                    showMessage('videoMessage', `Error: ${pollErr.message}`, 'error');
+                    showMessage('videoMessage', `Error: ${job.error}`, 'error');
+                    return;
                 }
-            }, 1000);
+
+                const pct = job.progress || 0;
+                setProgressValue(progressBar, progressPercent, pct, false);
+
+                if (job.status === 'processing') {
+                    progressStatus.textContent = blur
+                        ? '🕵️ Phase 2/2: Blurring faces in video (SSE Stream)...'
+                        : '🔍 Phase 2/2: Detecting faces in video (SSE Stream)...';
+                    const totalStr = job.total_frames > 0 ? job.total_frames : '--';
+                    const fpsVal = (job.fps !== undefined && job.fps > 0) ? `${job.fps.toFixed(1)} FPS` : '-- FPS';
+                    const etaStr = (job.eta_seconds !== null && job.eta_seconds !== undefined && job.eta_seconds >= 0)
+                        ? `~${job.eta_seconds}s`
+                        : '--';
+                    if (metaLeft) metaLeft.textContent = `Frames: ${job.processed_frames || 0} / ${totalStr}`;
+                    if (metaMid) metaMid.textContent = `Speed: ${fpsVal}`;
+                    if (metaRight) metaRight.textContent = `ETA: ${etaStr}`;
+                } else if (job.status === 'completed') {
+                    evtSource.close();
+                    progressBar.classList.remove('progress-bar-animated');
+                    setProgressValue(progressBar, progressPercent, 100, false);
+                    finishVideoSuccess(file.name, model, job);
+                } else if (job.status === 'failed') {
+                    evtSource.close();
+                    progressBar.classList.remove('progress-bar-animated');
+                    progressBox.style.display = 'none';
+                    btn.disabled = false;
+                    showMessage('videoMessage', `Error: ${job.error || 'Video processing failed'}`, 'error');
+                }
+            };
+
+            evtSource.onerror = () => {
+                evtSource.close();
+            };
 
         } catch (err) {
             progressBar.classList.remove('progress-bar-animated');
@@ -1192,20 +1267,25 @@
         lastModel = model;
         resetVideoRatingForm();
 
-        const elapsedInfo = data.elapsed_seconds ? ` in ${data.elapsed_seconds}s` : '';
-        document.getElementById('videoResultText').innerHTML =
-            `✅ Video processing complete${elapsedInfo}!<br><small>Output file: ${data.output_file}</small>`;
+        const stats = data.stats || {};
+        const totalDet = stats.total_detections !== undefined ? stats.total_detections : 0;
+        const fpsVal = stats.fps !== undefined ? stats.fps.toFixed(1) : '--';
 
-        document.getElementById('downloadLink').href = `${data.download_url}?download=1`;
+        document.getElementById('videoResultText').innerHTML =
+            `✅ Video processing complete!<br><small>Total Frames: ${stats.total_frames || 0} | Total Detections: ${totalDet} | Speed: ${fpsVal} FPS</small>`;
+
+        const downloadUrl = data.download_url || data.video_url;
+        document.getElementById('downloadLink').href = `${downloadUrl}&download=1`;
+        
         const outputVideo = document.getElementById('outputVideo');
-        outputVideo.src = `${data.download_url}?t=${Date.now()}`;
+        outputVideo.src = `${data.video_url}?t=${Date.now()}`;
         outputVideo.style.display = 'block';
         outputVideo.load();
 
         document.getElementById('videoProgress').style.display = 'none';
         document.getElementById('detectVideoBtn').disabled = false;
         document.getElementById('videoResult').style.display = 'block';
-        showMessage('videoMessage', `✅ ${data.message || 'Video processing complete'}`, 'success');
+        showMessage('videoMessage', '✅ Video processing successfully completed via SSE stream!', 'success');
     }
 
     function showMessage(id, text, type) {
@@ -1216,10 +1296,11 @@
     }
 
     function downloadImage() {
-        const img = document.getElementById('resultImage');
-        if (!img.src) return;
+        const canvas = document.getElementById('resultCanvas');
+        if (!canvas) return;
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         const a = document.createElement('a');
-        a.href = img.src;
+        a.href = dataUrl;
         a.download = `detection_${Date.now()}.jpg`;
         document.body.appendChild(a);
         a.click();
