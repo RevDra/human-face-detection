@@ -28,14 +28,12 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Project paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 OUTPUT_FOLDER = BASE_DIR / "outputs"
@@ -57,7 +55,6 @@ app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["OUTPUT_FOLDER"] = str(OUTPUT_FOLDER)
 
-# Model registry
 AVAILABLE_MODELS = {
     "yolov12n": "models/yolov12n-face.onnx",
     "yolov12s": "models/yolov12s-face.onnx",
@@ -69,7 +66,7 @@ MAX_LOADED_MODELS = int(os.environ.get("MAX_LOADED_MODELS", 2))
 detectors: "OrderedDict[str, YOLOv12FaceDetector]" = OrderedDict()
 detectors_lock = threading.Lock()
 
-video_jobs = {}
+video_jobs: dict[str, dict[str, Any]] = {}
 video_jobs_lock = threading.Lock()
 
 
