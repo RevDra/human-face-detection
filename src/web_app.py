@@ -253,7 +253,7 @@ def detect_image():
 
     except Exception as e:
         logger.error(f"Error in detect_image: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error during image detection"}), 500
 
 
 def _process_video_job(
@@ -307,11 +307,16 @@ def _process_video_job(
                         "download_url": f"/outputs/{output_filename}?download=true",
                     }
                 )
-    except Exception as e:
-        logger.error(f"Video job {job_id} failed: {e}", exc_info=True)
+    except Exception as exc:
+        app.logger.exception(f"Error in background video job {job_id}")
         with video_jobs_lock:
             if job_id in video_jobs:
-                video_jobs[job_id].update({"status": "failed", "error": str(e)})
+                video_jobs[job_id].update(
+                    {
+                        "status": "failed",
+                        "error": "Failed to process video",
+                    }
+                )
     finally:
         try:
             Path(input_path).unlink(missing_ok=True)
