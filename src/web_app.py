@@ -16,6 +16,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from face_detector import YOLOv12FaceDetector
 from flask import (
     Flask,
     Response,
@@ -26,8 +27,6 @@ from flask import (
     stream_with_context,
 )
 from werkzeug.utils import secure_filename
-
-from face_detector import YOLOv12FaceDetector
 
 # Configure logging
 logging.basicConfig(
@@ -76,10 +75,7 @@ video_jobs_lock = threading.Lock()
 
 def allowed_file(filename: str, allowed_extensions: set) -> bool:
     """Check if filename has an allowed extension."""
-    return (
-        "." in filename
-        and filename.rsplit(".", 1)[1].lower() in allowed_extensions
-    )
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
 
 
 def cleanup_old_files(max_age_seconds: int = 3600):
@@ -104,9 +100,7 @@ def cleanup_old_files(max_age_seconds: int = 3600):
             video_jobs.pop(jid, None)
 
 
-def get_detector(
-    conf_threshold: float = 0.32, model_key: str = "yolov12n"
-) -> YOLOv12FaceDetector:
+def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> YOLOv12FaceDetector:
     """
     Get or initialize a YOLOv12FaceDetector instance with LRU memory eviction.
     """
@@ -127,9 +121,7 @@ def get_detector(
 
         model_path = AVAILABLE_MODELS[model_key]
         logger.info(f"Loading model '{model_key}' from {model_path}...")
-        detector = YOLOv12FaceDetector(
-            model_path=model_path, conf_threshold=conf_threshold
-        )
+        detector = YOLOv12FaceDetector(model_path=model_path, conf_threshold=conf_threshold)
         detectors[model_key] = detector
         return detector
 
@@ -139,6 +131,7 @@ def index():
     """Render main web interface."""
     return render_template("index.html")
 
+
 @app.route("/api/models", methods=["GET"])
 def get_models():
     """Return available YOLOv12 face detection models for frontend selectors."""
@@ -146,25 +139,26 @@ def get_models():
         "nano": {
             "name": "yolov12n",
             "label": "YOLOv12 Nano (Fastest - Realtime)",
-            "description": "Optimized for speed, ideal for webcam."
+            "description": "Optimized for speed, ideal for webcam.",
         },
         "small": {
             "name": "yolov12s",
             "label": "YOLOv12 Small (Balanced)",
-            "description": "Good balance between speed and accuracy."
+            "description": "Good balance between speed and accuracy.",
         },
         "medium": {
             "name": "yolov12m",
             "label": "YOLOv12 Medium (High Accuracy)",
-            "description": "Higher precision for video analysis."
+            "description": "Higher precision for video analysis.",
         },
         "large": {
             "name": "yolov12l",
             "label": "YOLOv12 Large (Max Accuracy)",
-            "description": "Maximum precision for static images."
-        }
+            "description": "Maximum precision for static images.",
+        },
     }
     return jsonify(models_info)
+
 
 @app.route("/api/detect-image", methods=["POST"])
 def detect_image():
@@ -218,14 +212,10 @@ def detect_image():
                 }
             )
 
-        output_image = detector.draw_faces(
-            image, detections, blur_faces=blur_faces
-        )
+        output_image = detector.draw_faces(image, detections, blur_faces=blur_faces)
         face_crops = detector.get_face_crops(image, detections)
 
-        _, buffer = cv2.imencode(
-            ".jpg", output_image, [int(cv2.IMWRITE_JPEG_QUALITY), 85]
-        )
+        _, buffer = cv2.imencode(".jpg", output_image, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         img_base64 = base64.b64encode(buffer).decode("utf-8")
 
         faces_data = []
@@ -289,7 +279,7 @@ def _process_video_job(
             fps_val = round(processed / elapsed, 1)
             remaining = total - processed
             eta_val = int(remaining / fps_val) if fps_val > 0 else 0
-            
+
             with video_jobs_lock:
                 if job_id in video_jobs:
                     video_jobs[job_id]["processed_frames"] = processed
@@ -323,9 +313,7 @@ def _process_video_job(
         logger.error(f"Video job {job_id} failed: {e}", exc_info=True)
         with video_jobs_lock:
             if job_id in video_jobs:
-                video_jobs[job_id].update(
-                    {"status": "failed", "error": str(e)}
-                )
+                video_jobs[job_id].update({"status": "failed", "error": str(e)})
     finally:
         try:
             Path(input_path).unlink(missing_ok=True)
@@ -370,8 +358,8 @@ def detect_video():
                 "progress": 0,
                 "processed_frames": 0,
                 "total_frames": 0,
-                "fps": 0.0,          
-                "eta_seconds": 0,    
+                "fps": 0.0,
+                "eta_seconds": 0,
                 "created_at": time.time(),
             }
 
@@ -390,9 +378,7 @@ def detect_video():
         )
         worker.start()
 
-        return jsonify(
-            {"success": True, "job_id": job_id, "status": "processing"}
-        )
+        return jsonify({"success": True, "job_id": job_id, "status": "processing"})
 
     except Exception as e:
         logger.error(f"Error in detect_video: {e}", exc_info=True)
@@ -415,6 +401,7 @@ def stream_video_status(job_id: str):
     Server-Sent Events (SSE) endpoint for real-time video progress.
     Replaces repeated HTTP polling with a single persistent event stream.
     """
+
     def event_generator():
         last_processed = -1
         last_status = None
@@ -473,9 +460,7 @@ def detect_webcam_frame():
                 frame_b64 = frame_b64.split(",", 1)[1]
             if frame_b64:
                 img_bytes = base64.b64decode(frame_b64)
-                frame = cv2.imdecode(
-                    np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR
-                )
+                frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
 
         if frame is None:
             return jsonify({"error": "Invalid frame data"}), 400
@@ -517,9 +502,7 @@ def detect_webcam_frame():
 def serve_output(filename: str):
     """Serve processed video files with optional download attachment."""
     as_attachment = request.args.get("download", "false").lower() == "true"
-    return send_from_directory(
-        app.config["OUTPUT_FOLDER"], filename, as_attachment=as_attachment
-    )
+    return send_from_directory(app.config["OUTPUT_FOLDER"], filename, as_attachment=as_attachment)
 
 
 @app.route("/api/health", methods=["GET"])
