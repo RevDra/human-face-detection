@@ -1,620 +1,540 @@
 """
-Flask Web Application for YOLOv12 Face Detection (ONNX Backend)
-Supports image upload, video upload, and live webcam streaming
-Optimized for Headless CPU Cloud environments (Hugging Face Spaces)
+Flask Web Application for YOLOv12 Human Face Detection
+Provides REST APIs and Web UI for image, video, and webcam detection
 """
 
+import base64
+import gc
+import json
+import logging
 import os
 import threading
 import time
 import uuid
-
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("ONNXRUNTIME_INTER_OP_NUM_THREADS", "1")
-os.environ.setdefault("ONNXRUNTIME_INTRA_OP_NUM_THREADS", "2")
-
-import base64
-import logging
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, cast
 
 import cv2
 import numpy as np
-from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, send_file
-from flask_limiter import Limiter
-from flask_limiter.errors import RateLimitExceeded
-from flask_limiter.util import get_remote_address
-from flask_sqlalchemy import SQLAlchemy
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+    stream_with_context,
+)
 from werkzeug.utils import secure_filename
 
-try:
-    from turbojpeg import TurboJPEG
+from face_detector import YOLOv12FaceDetector
 
-    jpeg_engine = TurboJPEG()
-except Exception:
-    jpeg_engine = None
-
-
-def decode_image_fast(image_bytes: bytes) -> np.ndarray:
-    """Decode images using TurboJPEG if have, else OpenCV"""
-    if jpeg_engine is not None:
-        try:
-            return jpeg_engine.decode(image_bytes)
-        except Exception:
-            pass
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-
-def encode_jpeg_fast(image_bgr: np.ndarray, quality: int = 85) -> bytes:
-    """Zip to TurboJPEG"""
-    if jpeg_engine is not None:
-        try:
-            res = jpeg_engine.encode(image_bgr, quality=quality)
-            if res is not None:
-                return cast(bytes, res)
-        except Exception:
-            pass
-    _, buffer = cv2.imencode(".jpg", image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
-    return bytes(buffer)
-
-
-from face_detection_yolov12 import YOLOv12FaceDetector, detect_from_video
-
-load_dotenv()
-
-app = Flask(__name__, template_folder="../web/templates")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DB_URL")
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback_secret_key_neu_khong_co")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280}
-
-db = SQLAlchemy(app)
-PROJECT_ROOT = Path(__file__).parent.parent
-UPLOAD_FOLDER = PROJECT_ROOT / "data" / "uploads"
-MODELS_DIR = PROJECT_ROOT / "models"
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "mp4", "avi", "mov", "mkv"}
-MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB
-
-ALLOWED_MODELS = {
-    "yolov12n-face-int8.onnx",
-    "yolov12s-face-int8.onnx",
-    "yolov12m-face-int8.onnx",
-    "yolov12l-face-int8.onnx",
-}
-UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
-
-limiter = Limiter(
-    key_func=get_remote_address,
-    app=app,
-    default_limits=["10000 per day", "1000 per hour"],
-    storage_uri="memory://",
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
+
+# Project paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+OUTPUT_FOLDER = BASE_DIR / "outputs"
+TEMPLATE_FOLDER = BASE_DIR / "web" / "templates"
+STATIC_FOLDER = BASE_DIR / "web" / "static"
+
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "webp"}
+ALLOWED_VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "webm"}
+
+app = Flask(
+    __name__,
+    template_folder=str(TEMPLATE_FOLDER),
+    static_folder=str(STATIC_FOLDER),
+)
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
+app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
+app.config["OUTPUT_FOLDER"] = str(OUTPUT_FOLDER)
+
+# Model registry
+AVAILABLE_MODELS = {
+    "yolov12n": "models/yolov12n-face.onnx",
+    "yolov12s": "models/yolov12s-face.onnx",
+    "yolov12m": "models/yolov12m-face.onnx",
+    "yolov12l": "models/yolov12l-face.onnx",
+}
+
+MAX_LOADED_MODELS = int(os.environ.get("MAX_LOADED_MODELS", 2))
+detectors: "OrderedDict[str, YOLOv12FaceDetector]" = OrderedDict()
+detectors_lock = threading.Lock()
+
+video_jobs = {}
+video_jobs_lock = threading.Lock()
 
 
-class Feedback(db.Model):  # type: ignore
-    __tablename__ = "feedbacks"
-    id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(255))
-    model_name = db.Column(db.String(50))
-    rating = db.Column(db.Integer)
-    comment = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+def allowed_file(filename: str, allowed_extensions: set) -> bool:
+    """Check if filename has an allowed extension."""
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in allowed_extensions
+    )
 
 
-with app.app_context():
-    try:
-        db.create_all()
-        print("Connect to MySQL successfully!")
-    except Exception as e:
-        print(f"Connection error: {e}")
-
-
-def get_detector(model_name):
-    """
-    Get or create detector instance.
-    The YOLOv12FaceDetector class natively handles Singleton caching internally,
-    so we don't need a manual dictionary cache here anymore.
-    """
-    safe_name = secure_filename(model_name)
-
-    if safe_name.endswith(".pt"):
-        safe_name = safe_name.replace(".pt", ".onnx")
-
-    if safe_name not in ALLOWED_MODELS:
-        logging.error(f"Attempt to load unsupported model: {safe_name}")
-        raise ValueError(f"Unsupported model: {safe_name}")
-
-    model_path = MODELS_DIR / safe_name
-
-    try:
-        final_path = model_path.resolve()
-        safe_root = MODELS_DIR.resolve()
-        if not str(final_path).startswith(str(safe_root)):
-            logging.error(f"Security Alert: Symlink attack detected! {final_path}")
-            raise ValueError("Invalid model path (Symlink violation)")
-
-    except Exception as e:
-        logging.error(f"Error resolving model path: {str(e)}")
-        raise FileNotFoundError(f"Model path error: {str(e)}")
-
-    if not final_path.exists():
-        logging.error(f"Model file not found: {final_path}")
-        raise FileNotFoundError(f"Model not found: {final_path}")
-
-    return YOLOv12FaceDetector(final_path.name)
-
-
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def is_image(filename):
-    """Check if file is image"""
-    ext = filename.rsplit(".", 1)[1].lower()
-    return ext in {"jpg", "jpeg", "png", "gif"}
-
-
-def is_video(filename):
-    """Check if file is video"""
-    ext = filename.rsplit(".", 1)[1].lower()
-    return ext in {"mp4", "avi", "mov", "mkv"}
-
-
-_last_cleanup_time = 0.0
-_cleanup_lock = threading.Lock()
-
-
-def cleanup_old_files(
-    directory: Path, max_age_seconds: int = 1800, min_interval: int = 300
-) -> None:
-    """Chỉ quét ổ cứng tối đa 5 phút (300s) một lần để tránh nghẽn I/O."""
-    global _last_cleanup_time
+def cleanup_old_files(max_age_seconds: int = 3600):
+    """Remove temporary uploaded and output files older than max_age_seconds."""
     now = time.time()
-    if now - _last_cleanup_time < min_interval:
-        return
+    for folder in (UPLOAD_FOLDER, OUTPUT_FOLDER):
+        try:
+            for file_path in folder.iterdir():
+                if file_path.is_file() and file_path.name != ".gitkeep":
+                    if now - file_path.stat().st_mtime > max_age_seconds:
+                        file_path.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"Cleanup warning in {folder}: {e}")
 
-    with _cleanup_lock:
-        if now - _last_cleanup_time < min_interval:
-            return
-        _last_cleanup_time = now
-
-    if not directory.exists():
-        return
-
-    valid_exts = {".mp4", ".avi", ".mov", ".mkv", ".jpg", ".jpeg", ".png", ".webp"}
-    for file_path in directory.iterdir():
-        if file_path.is_file() and file_path.suffix.lower() in valid_exts:
-            try:
-                if now - file_path.stat().st_mtime > max_age_seconds:
-                    file_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-
-VIDEO_EXECUTOR = ThreadPoolExecutor(max_workers=1)
-VIDEO_JOBS: dict[str, dict] = {}
-VIDEO_JOBS_LOCK = threading.Lock()
-
-
-def cleanup_old_jobs(max_age_seconds: int = 1800) -> None:
-    now = time.time()
-    with VIDEO_JOBS_LOCK:
-        expired_ids = [
+    with video_jobs_lock:
+        expired_jobs = [
             jid
-            for jid, info in VIDEO_JOBS.items()
-            if now - info.get("created_at", now) > max_age_seconds
+            for jid, job in video_jobs.items()
+            if now - job.get("created_at", now) > max_age_seconds
         ]
-        for jid in expired_ids:
-            VIDEO_JOBS.pop(jid, None)
+        for jid in expired_jobs:
+            video_jobs.pop(jid, None)
 
 
-def _run_video_job(
-    job_id: str, input_path: Path, output_path: Path, model: str, blur: bool
-) -> None:
-    start_time = time.time()
-    with VIDEO_JOBS_LOCK:
-        if job_id in VIDEO_JOBS:
-            VIDEO_JOBS[job_id]["status"] = "processing"
-            VIDEO_JOBS[job_id]["started_at"] = start_time
+def get_detector(
+    conf_threshold: float = 0.32, model_key: str = "yolov12n"
+) -> YOLOv12FaceDetector:
+    """
+    Get or initialize a YOLOv12FaceDetector instance with LRU memory eviction.
+    """
+    if model_key not in AVAILABLE_MODELS:
+        model_key = "yolov12n"
 
-    def _on_progress(processed: int, total: int) -> None:
-        elapsed = max(0.001, time.time() - start_time)
-        fps = round(processed / elapsed, 1)
-        if total > 0:
-            pct = min(99, int((processed / total) * 100))
-            remaining_frames = max(0, total - processed)
-            eta_seconds = int(remaining_frames / max(0.1, fps))
-        else:
-            pct = 50
-            eta_seconds = 0
+    with detectors_lock:
+        if model_key in detectors:
+            detectors.move_to_end(model_key)
+            detector = detectors[model_key]
+            detector.conf_threshold = conf_threshold
+            return detector
 
-        with VIDEO_JOBS_LOCK:
-            if job_id in VIDEO_JOBS:
-                VIDEO_JOBS[job_id].update(
-                    {
-                        "progress": pct,
-                        "processed_frames": processed,
-                        "total_frames": total,
-                        "fps": fps,
-                        "eta_seconds": eta_seconds,
-                    }
-                )
+        while len(detectors) >= MAX_LOADED_MODELS:
+            evicted_key, _ = detectors.popitem(last=False)
+            logger.info(f"Evicted model '{evicted_key}' from LRU cache to free RAM.")
+            gc.collect()
 
-    try:
-        detect_from_video(
-            video_path=str(input_path),
-            model_path=model,
-            output_path=str(output_path),
-            conf_threshold=0.32,
-            blur_faces=blur,
-            progress_callback=_on_progress,
+        model_path = AVAILABLE_MODELS[model_key]
+        logger.info(f"Loading model '{model_key}' from {model_path}...")
+        detector = YOLOv12FaceDetector(
+            model_path=model_path, conf_threshold=conf_threshold
         )
-
-        if not output_path.exists() or output_path.stat().st_size == 0:
-            raise RuntimeError("Output video file was not generated properly.")
-
-        total_elapsed = round(time.time() - start_time, 1)
-        with VIDEO_JOBS_LOCK:
-            if job_id in VIDEO_JOBS:
-                VIDEO_JOBS[job_id].update(
-                    {
-                        "status": "completed",
-                        "progress": 100,
-                        "elapsed_seconds": total_elapsed,
-                        "eta_seconds": 0,
-                        "message": "Video processing complete",
-                        "output_file": output_path.name,
-                        "download_url": f"/api/download/{output_path.name}",
-                    }
-                )
-    except Exception as exc:
-        app.logger.exception(f"Error in background video job {job_id}")
-        with VIDEO_JOBS_LOCK:
-            if job_id in VIDEO_JOBS:
-                VIDEO_JOBS[job_id].update(
-                    {
-                        "status": "failed",
-                        "error": str(exc) or "Failed to process video",
-                    }
-                )
-    finally:
-        input_path.unlink(missing_ok=True)
+        detectors[model_key] = detector
+        return detector
 
 
 @app.route("/")
 def index():
-    """Main page"""
+    """Render main web interface."""
     return render_template("index.html")
 
+@app.route("/api/models", methods=["GET"])
+def get_models():
+    """Return available YOLOv12 face detection models for frontend selectors."""
+    models_info = {
+        "nano": {
+            "name": "yolov12n",
+            "label": "YOLOv12 Nano (Fastest - Realtime)",
+            "description": "Optimized for speed, ideal for webcam."
+        },
+        "small": {
+            "name": "yolov12s",
+            "label": "YOLOv12 Small (Balanced)",
+            "description": "Good balance between speed and accuracy."
+        },
+        "medium": {
+            "name": "yolov12m",
+            "label": "YOLOv12 Medium (High Accuracy)",
+            "description": "Higher precision for video analysis."
+        },
+        "large": {
+            "name": "yolov12l",
+            "label": "YOLOv12 Large (Max Accuracy)",
+            "description": "Maximum precision for static images."
+        }
+    }
+    return jsonify(models_info)
 
 @app.route("/api/detect-image", methods=["POST"])
 def detect_image():
-    """Detect faces in uploaded image or live webcam frame"""
+    """Detect faces in uploaded image."""
     try:
-        cleanup_old_files(UPLOAD_FOLDER)
-        if "file" not in request.files:
-            return jsonify({"error": "No file provided"}), 400
+        if "image" not in request.files:
+            return jsonify({"error": "No image provided"}), 400
 
-        file = request.files["file"]
+        file = request.files["image"]
         if file.filename == "":
-            return jsonify({"error": "No file selected"}), 400
+            return jsonify({"error": "Empty filename"}), 400
 
-        if not allowed_file(file.filename) or not is_image(file.filename):
-            return jsonify({"error": "Only image files allowed"}), 400
+        if not allowed_file(file.filename, ALLOWED_IMAGE_EXTENSIONS):
+            return jsonify({"error": "Invalid image format"}), 400
 
-        # Get parameters
-        model = request.form.get("model", "yolov12s-face-int8.onnx")
-        blur = request.form.get("blur") == "true"
+        conf_threshold = float(request.form.get("confidence", 0.5))
+        blur_faces = request.form.get("blur_faces", "false").lower() == "true"
+        model_key = request.form.get("model", "yolov12n")
+        return_mode = request.form.get("return_mode", "base64")
 
-        # Nhận diện xem request có phải đến từ luồng Webcam hay không
-        is_webcam = request.form.get("mode") == "webcam" or "webcam" in file.filename.lower()
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-        if not model.endswith(".onnx"):
-            model = model.replace(".pt", ".onnx")
-
-        if model not in ALLOWED_MODELS:
-            app.logger.info(f"Invalid model '{model}' requested. Fallback to default.")
-            model = "yolov12n-face-int8.onnx" if is_webcam else "yolov12s-face-int8.onnx"
-
-        # Lấy instance detector (đã được cache ở RAM qua Singleton)
-        detector = get_detector(model)
-
-        # Giải mã ảnh trực tiếp từ bytes tốc độ cao
-        image_data = file.read()
-        image = decode_image_fast(image_data)
         if image is None:
-            return jsonify({"error": "Invalid image data"}), 400
+            return jsonify({"error": "Failed to read image"}), 400
 
         img_h, img_w = image.shape[:2]
-        detections = detector.detect_faces(image, conf_threshold=0.32)
+        detector = get_detector(conf_threshold, model_key)
+        detections = detector.detect_faces(image, conf_threshold=conf_threshold)
 
-        # --- NHÁNH 1: WEBCAM (CHỈ TRẢ VỀ TỌA ĐỘ - ZERO SERVER-SIDE RENDERING) ---
-        if is_webcam:
+        if return_mode == "coords":
             return jsonify(
                 {
                     "success": True,
-                    "mode": "coordinates_only",
-                    "frame_width": img_w,
-                    "frame_height": img_h,
-                    "detections": {
-                        "count": len(detections),
-                        "boxes": [
-                            {
-                                "x1": det["x1"],
-                                "y1": det["y1"],
-                                "x2": det["x2"],
-                                "y2": det["y2"],
-                                "w": det["w"],
-                                "h": det["h"],
-                                "conf": round(det["confidence"], 3),
-                            }
-                            for det in detections
-                        ],
-                    },
+                    "num_faces": len(detections),
+                    "img_w": img_w,
+                    "img_h": img_h,
+                    "detections": [
+                        {
+                            "id": i + 1,
+                            "x1": int(d["x1"]),
+                            "y1": int(d["y1"]),
+                            "x2": int(d["x2"]),
+                            "y2": int(d["y2"]),
+                            "w": int(d["w"]),
+                            "h": int(d["h"]),
+                            "confidence": round(float(d["confidence"]), 4),
+                        }
+                        for i, d in enumerate(detections)
+                    ],
                 }
             )
 
-        # --- NHÁNH 2: ẢNH TĨNH UPLOAD THÔNG THƯỜNG ---
-        result_image = detector.draw_faces(
-            image, detections, show_conf=not blur, blur_faces=blur, inplace=True
+        output_image = detector.draw_faces(
+            image, detections, blur_faces=blur_faces
         )
+        face_crops = detector.get_face_crops(image, detections)
 
-        if result_image is None:
-            return jsonify({"error": "Failed to process image"}), 500
+        _, buffer = cv2.imencode(
+            ".jpg", output_image, [int(cv2.IMWRITE_JPEG_QUALITY), 85]
+        )
+        img_base64 = base64.b64encode(buffer).decode("utf-8")
 
-        # Extract crops for gallery
-        crops_base64 = []
-        if len(detections) > 0:
-            crops = detector.get_face_crops(image, detections)
-            for crop in crops:
-                crop_bytes = encode_jpeg_fast(crop, quality=80)
-                crops_base64.append(base64.b64encode(crop_bytes).decode())
+        faces_data = []
+        for i, crop_data in enumerate(face_crops):
+            _, crop_buffer = cv2.imencode(
+                ".jpg", crop_data["image"], [int(cv2.IMWRITE_JPEG_QUALITY), 85]
+            )
+            crop_base64 = base64.b64encode(crop_buffer).decode("utf-8")
+            faces_data.append(
+                {
+                    "id": i + 1,
+                    "image": f"data:image/jpeg;base64,{crop_base64}",
+                    "confidence": round(crop_data["confidence"] * 100, 2),
+                    "bbox": crop_data["bbox"],
+                }
+            )
 
-        # Convert result to base64 for display
-        result_bytes = encode_jpeg_fast(result_image, quality=85)
-        img_base64 = base64.b64encode(result_bytes).decode()
-
-        # Prepare response
-        response = {
-            "success": True,
-            "image": f"data:image/jpeg;base64,{img_base64}",
-            "detections": {
-                "count": len(detections),
-                "faces": [
+        return jsonify(
+            {
+                "success": True,
+                "num_faces": len(detections),
+                "output_image": f"data:image/jpeg;base64,{img_base64}",
+                "faces": faces_data,
+                "detections": [
                     {
                         "id": i + 1,
-                        "confidence": f"{det['confidence']:.2%}",
-                        "width": det["w"],
-                        "height": det["h"],
-                        "position": f"({det['x1']}, {det['y1']})",
+                        "x1": int(d["x1"]),
+                        "y1": int(d["y1"]),
+                        "w": int(d["w"]),
+                        "h": int(d["h"]),
+                        "confidence": round(float(d["confidence"]) * 100, 2),
                     }
-                    for i, det in enumerate(detections)
+                    for i, d in enumerate(detections)
                 ],
-                "crops": crops_base64,
-            },
-        }
+            }
+        )
 
-        return jsonify(response)
+    except Exception as e:
+        logger.error(f"Error in detect_image: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
-    except Exception:
-        logging.exception("Error during image detection")
-        return jsonify({"error": "Internal server error during image detection"}), 500
+
+def _process_video_job(
+    job_id: str,
+    input_path: str,
+    output_path: str,
+    output_filename: str,
+    conf_threshold: float,
+    blur_faces: bool,
+    model_key: str,
+):
+    """Background worker function to process video and update progress."""
+    try:
+        detector = get_detector(conf_threshold, model_key)
+        job_start_time = time.time()
+
+        def update_progress(processed: int, total: int):
+            pct = int(round((processed / total) * 100)) if total > 0 else 0
+            pct = min(99, max(0, pct))
+            elapsed = max(0.1, time.time() - job_start_time)
+            fps_val = round(processed / elapsed, 1)
+            remaining = total - processed
+            eta_val = int(remaining / fps_val) if fps_val > 0 else 0
+            
+            with video_jobs_lock:
+                if job_id in video_jobs:
+                    video_jobs[job_id]["processed_frames"] = processed
+                    video_jobs[job_id]["total_frames"] = total
+                    video_jobs[job_id]["progress"] = pct
+                    video_jobs[job_id]["fps"] = fps_val
+                    video_jobs[job_id]["eta_seconds"] = eta_val
+
+        stats = detector.detect_from_video(
+            video_path=input_path,
+            output_path=output_path,
+            show_preview=False,
+            blur_faces=blur_faces,
+            progress_callback=update_progress,
+        )
+
+        with video_jobs_lock:
+            if job_id in video_jobs:
+                video_jobs[job_id].update(
+                    {
+                        "status": "completed",
+                        "progress": 100,
+                        "processed_frames": stats["total_frames"],
+                        "total_frames": stats["total_frames"],
+                        "stats": stats,
+                        "video_url": f"/outputs/{output_filename}",
+                        "download_url": f"/outputs/{output_filename}?download=true",
+                    }
+                )
+    except Exception as e:
+        logger.error(f"Video job {job_id} failed: {e}", exc_info=True)
+        with video_jobs_lock:
+            if job_id in video_jobs:
+                video_jobs[job_id].update(
+                    {"status": "failed", "error": str(e)}
+                )
+    finally:
+        try:
+            Path(input_path).unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 @app.route("/api/detect-video", methods=["POST"])
-@limiter.limit("5 per hour")
 def detect_video():
-    """Detect faces in uploaded video"""
+    """Upload a video and start asynchronous face detection job."""
     try:
-        cleanup_old_files(UPLOAD_FOLDER)
-        cleanup_old_jobs()
-        if "file" not in request.files:
-            return jsonify({"error": "No file provided"}), 400
+        cleanup_old_files()
 
-        file = request.files["file"]
+        if "video" not in request.files:
+            return jsonify({"error": "No video file provided"}), 400
+
+        file = request.files["video"]
         if file.filename == "":
-            return jsonify({"error": "No file selected"}), 400
+            return jsonify({"error": "Empty filename"}), 400
 
-        if not allowed_file(file.filename) or not is_video(file.filename):
-            return jsonify({"error": "Only video files allowed"}), 400
+        if not allowed_file(file.filename, ALLOWED_VIDEO_EXTENSIONS):
+            return jsonify({"error": "Invalid video format"}), 400
 
-        # Get model selection
-        raw_model = request.form.get("model", "yolov12n-face-int8.onnx")
-        blur = request.form.get("blur") == "true"
-        model = Path(raw_model).name
-        if model.endswith(".pt"):
-            model = model.replace(".pt", ".onnx")
-        if not model.endswith(".onnx"):
-            model = f"{model}.onnx"
+        conf_threshold = float(request.form.get("confidence", 0.5))
+        blur_faces = request.form.get("blur_faces", "false").lower() == "true"
+        model_key = request.form.get("model", "yolov12n")
 
-        if model not in ALLOWED_MODELS:
-            app.logger.info(f"Invalid model '{model}' requested. Fallback to default (Nano INT8).")
-            model = "yolov12n-face-int8.onnx"
+        job_id = uuid.uuid4().hex
+        safe_name = secure_filename(file.filename)
+        input_filename = f"{job_id}_{safe_name}"
+        output_filename = f"detected_{job_id}.mp4"
 
-        job_id = uuid.uuid4().hex[:12]
-        filename = secure_filename(file.filename)
-        input_path = UPLOAD_FOLDER / f"input_{uuid.uuid4().hex[:8]}_{filename}"
-        output_path = UPLOAD_FOLDER / f"output_{uuid.uuid4().hex[:8]}_{filename}"
+        input_path = str(UPLOAD_FOLDER / input_filename)
+        output_path = str(OUTPUT_FOLDER / output_filename)
+
         file.save(input_path)
 
-        with VIDEO_JOBS_LOCK:
-            VIDEO_JOBS[job_id] = {
+        with video_jobs_lock:
+            video_jobs[job_id] = {
                 "job_id": job_id,
-                "status": "queued",
+                "status": "processing",
                 "progress": 0,
                 "processed_frames": 0,
                 "total_frames": 0,
-                "fps": 0.0,
-                "eta_seconds": None,
+                "fps": 0.0,          
+                "eta_seconds": 0,    
                 "created_at": time.time(),
-                "output_file": output_path.name,
-                "download_url": f"/api/download/{output_path.name}",
             }
 
-        VIDEO_EXECUTOR.submit(_run_video_job, job_id, input_path, output_path, model, blur)
-        # Return file info
-        response = {
-            "success": True,
-            "status": "queued",
-            "job_id": job_id,
-            "message": "Video job submitted to processing queue",
-            "status_url": f"/api/video-status/{job_id}",
-        }
+        worker = threading.Thread(
+            target=_process_video_job,
+            args=(
+                job_id,
+                input_path,
+                output_path,
+                output_filename,
+                conf_threshold,
+                blur_faces,
+                model_key,
+            ),
+            daemon=True,
+        )
+        worker.start()
 
-        return jsonify(response), 202
+        return jsonify(
+            {"success": True, "job_id": job_id, "status": "processing"}
+        )
 
-    except Exception:
-        app.logger.exception("Error while processing video detection request")
-        return jsonify({"error": "Internal server error"}), 500
+    except Exception as e:
+        logger.error(f"Error in detect_video: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/video-status/<job_id>", methods=["GET"])
 def get_video_status(job_id: str):
-    with VIDEO_JOBS_LOCK:
-        job = VIDEO_JOBS.get(job_id)
+    """Poll video processing status (kept for fallback & backward compatibility)."""
+    with video_jobs_lock:
+        job = video_jobs.get(job_id)
         if not job:
-            return jsonify({"success": False, "error": "Job not found or expired"}), 404
-        return jsonify({"success": True, **job})
+            return jsonify({"error": "Job not found"}), 404
+        return jsonify(dict(job))
 
 
-@app.route("/api/download/<filename>", methods=["GET"])
-def download_file(filename):
-    try:
-        filepath = UPLOAD_FOLDER / secure_filename(filename)
-        if not filepath.exists():
-            return jsonify({"error": "File not found"}), 404
+@app.route("/api/video-stream/<job_id>", methods=["GET"])
+def stream_video_status(job_id: str):
+    """
+    Server-Sent Events (SSE) endpoint for real-time video progress.
+    Replaces repeated HTTP polling with a single persistent event stream.
+    """
+    def event_generator():
+        last_processed = -1
+        last_status = None
 
-        as_attachment = request.args.get("download") == "1"
+        while True:
+            with video_jobs_lock:
+                job = video_jobs.get(job_id)
+                if not job:
+                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                    break
+                snapshot = dict(job)
 
-        return send_file(
-            filepath,
-            mimetype="video/mp4",
-            as_attachment=as_attachment,
-            conditional=True,
-        )
-    except Exception:
-        app.logger.exception("Error while processing download request for %s", filename)
-        return jsonify({"error": "Internal server error"}), 500
+            curr_processed = snapshot.get("processed_frames", 0)
+            curr_status = snapshot.get("status")
 
+            if curr_processed != last_processed or curr_status != last_status:
+                last_processed = curr_processed
+                last_status = curr_status
+                yield f"data: {json.dumps(snapshot)}\n\n"
 
-@app.route("/api/models", methods=["GET"])
-def get_models():
-    """Get ALL available ONNX models for dropdown selection"""
-    models = {
-        "nano": {
-            "name": "yolov12n-face-int8.onnx",
-            "label": "Nano (n) - Fastest (ONNX INT8)",
-            "description": "Real-time speed, best for CPU/Webcam",
-            "size": "Smallest",
-        },
-        "small": {
-            "name": "yolov12s-face-int8.onnx",
-            "label": "Small (s) - Balanced (ONNX INT8)",
-            "description": "Good balance of speed and accuracy",
-            "size": "Small",
-        },
-        "medium": {
-            "name": "yolov12m-face-int8.onnx",
-            "label": "Medium (m) - High Precision (ONNX INT8)",
-            "description": "High accuracy, optimized CPU execution",
-            "size": "Medium",
-        },
-        "large": {
-            "name": "yolov12l-face-int8.onnx",
-            "label": "Large (l) - Max Accuracy (ONNX INT8)",
-            "description": "Best detection quality",
-            "size": "Large",
-        },
+            if curr_status in ("completed", "failed"):
+                break
+
+            time.sleep(0.35)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
     }
-
-    available: dict[str, Any] = {}
-    for key, info in models.items():
-        model_path = MODELS_DIR / info["name"]
-        if model_path.exists():
-            available[key] = info
-
-    order = ["nano", "small", "medium", "large"]
-    sorted_available = {k: available[k] for k in order if k in available}
-
-    return jsonify(sorted_available)
+    return Response(
+        stream_with_context(event_generator()),
+        mimetype="text/event-stream",
+        headers=headers,
+    )
 
 
-@app.route("/api/feedback", methods=["POST"])
-@limiter.limit("5 per minute")
-def submit_feedback():
+@app.route("/api/webcam-frame", methods=["POST"])
+def detect_webcam_frame():
+    """Detect faces in a single webcam frame sent from browser."""
     try:
-        data = request.json
+        conf_threshold = float(request.form.get("confidence", 0.32))
+        model_key = request.form.get("model", "yolov12n")
+        frame = None
 
-        new_fb = Feedback(
-            filename=data.get("filename"),
-            model_name=data.get("model"),
-            rating=data.get("rating"),
-            comment=data.get("comment", ""),
+        image_file = request.files.get("file") or request.files.get("frame")
+        if image_file:
+            file_bytes = np.frombuffer(image_file.read(), np.uint8)
+            frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        elif request.is_json:
+            data = request.get_json(silent=True) or {}
+            conf_threshold = float(data.get("confidence", 0.32))
+            model_key = data.get("model", "yolov12n")
+            frame_b64 = data.get("frame", "")
+            if "," in frame_b64:
+                frame_b64 = frame_b64.split(",", 1)[1]
+            if frame_b64:
+                img_bytes = base64.b64decode(frame_b64)
+                frame = cv2.imdecode(
+                    np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR
+                )
+
+        if frame is None:
+            return jsonify({"error": "Invalid frame data"}), 400
+
+        img_h, img_w = frame.shape[:2]
+        detector = get_detector(conf_threshold, model_key)
+        detections = detector.detect_faces(frame, conf_threshold=conf_threshold)
+
+        return jsonify(
+            {
+                "success": True,
+                "frame_width": img_w,
+                "frame_height": img_h,
+                "num_faces": len(detections),
+                "detections": {
+                    "count": len(detections),
+                    "boxes": [
+                        {
+                            "x1": int(d["x1"]),
+                            "y1": int(d["y1"]),
+                            "x2": int(d["x2"]),
+                            "y2": int(d["y2"]),
+                            "w": int(d["w"]),
+                            "h": int(d["h"]),
+                            "conf": float(d["confidence"]),
+                        }
+                        for d in detections
+                    ],
+                },
+            }
         )
-        db.session.add(new_fb)
-        db.session.commit()
-        return jsonify({"success": True, "message": "Rating saved!"})
+
     except Exception as e:
-        app.logger.error(f"DB Error: {e}")
-        return jsonify({"error": "Database error"}), 500
+        logger.error(f"Error in detect_webcam_frame: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/outputs/<path:filename>")
+def serve_output(filename: str):
+    """Serve processed video files with optional download attachment."""
+    as_attachment = request.args.get("download", "false").lower() == "true"
+    return send_from_directory(
+        app.config["OUTPUT_FOLDER"], filename, as_attachment=as_attachment
+    )
 
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "Face Detection ONNX API"})
-
-
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    """Handle file size exceeded"""
-    return jsonify({"error": "File too large. Maximum 500MB allowed"}), 413
-
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle internal server error"""
-    return jsonify({"error": "Internal server error"}), 500
-
-
-@app.errorhandler(RateLimitExceeded)
-def handle_rate_limit_error(e):
-    """Handle rate limit exceeded errors"""
-    app.logger.warning(f"Rate limit exceeded: {e.description}")
-    return (
-        jsonify(
-            {
-                "error": "Too many requests",
-                "message": f"Too fast! Please wait a moment. ({e.description})",
-            }
-        ),
-        429,
+    """Health check endpoint for Docker / Cloud deployment."""
+    return jsonify(
+        {
+            "status": "healthy",
+            "loaded_models": list(detectors.keys()),
+            "max_loaded_models": MAX_LOADED_MODELS,
+        }
     )
 
 
 if __name__ == "__main__":
-    print("\n" + "=" * 70)
-    print("🌐 Starting YOLOv12 Face Detection Web Server (ONNX Optimized)")
-    print("=" * 70)
-    print("\n📍 Server: http://localhost:7860")
-    print("📁 Upload folder: ", UPLOAD_FOLDER)
-    print("🔧 Models folder: ", MODELS_DIR)
-    print("\n🎯 Available endpoints:")
-    print("   GET  /                    - Web interface")
-    print("   POST /api/detect-image    - Detect faces in image")
-    print("   POST /api/detect-video    - Detect faces in video")
-    print("   GET  /api/models          - Get available ONNX models")
-    print("   GET  /api/health          - Health check")
-    print("\n" + "=" * 70 + "\n")
-
-    # Determine debug mode from environment (default: disabled)
-    debug_mode = os.getenv("FLASK_ENV") == "development"
-    app.run(host="0.0.0.0", port=7860, debug=debug_mode, use_reloader=False)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
