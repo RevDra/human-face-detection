@@ -505,7 +505,7 @@
 
         <div class="footer text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
             <p class="mb-1 text-white-50">
-                🚀 YOLOv12 Face Detection Web - Version 1.8.0 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
+                🚀 YOLOv12 Face Detection Web - Version 1.9.1 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
             </p>
             <p class="mb-0 small text-muted">
                 2026 &copy; Developed by <a href="mailto:luongminhngoc0@gmail.com">Ngoc M. Luong</a> with ❤️
@@ -705,7 +705,7 @@
                             return;
                         }
                         const formData = new FormData();
-                        formData.append('file', blob, 'webcam.jpg'); // Đảm bảo key là 'file'
+                        formData.append('file', blob, 'webcam.jpg');
                         formData.append('model', model);
                         formData.append('confidence', '0.5');
                         
