@@ -712,8 +712,13 @@ async def detect_webcam_frame(request: Request) -> JSONResponse:
 @app.get("/outputs/{filename:path}")
 async def serve_output(filename: str, download: str = "false") -> Response:
     """Serve processed video files with HTTP Range support and optional download attachment."""
+    # 1. Chặn tuyệt đối các ký tự điều hướng thư mục nguy hiểm hoặc tên file không hợp lệ
+    safe_name = Path(filename).name
+    if not safe_name or safe_name in (".", "..") or "/" in filename or "\\" in filename:
+        return JSONResponse({"error": "Invalid file path"}, status_code=400)
+
     safe_root = OUTPUT_FOLDER.resolve()
-    target_path = (OUTPUT_FOLDER / filename).resolve()
+    target_path = (OUTPUT_FOLDER / safe_name).resolve()
 
     if not str(target_path).startswith(str(safe_root)) or not target_path.is_file():
         return JSONResponse({"error": "File not found"}, status_code=404)
