@@ -17,7 +17,6 @@ from typing import Any
 
 import cv2
 import numpy as np
-from face_detector import YOLOv12FaceDetector
 from flask import (
     Flask,
     Response,
@@ -28,6 +27,8 @@ from flask import (
     stream_with_context,
 )
 from werkzeug.utils import secure_filename
+
+from face_detector import YOLOv12FaceDetector
 
 logging.basicConfig(
     level=logging.INFO,
