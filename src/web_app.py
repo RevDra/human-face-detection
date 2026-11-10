@@ -713,17 +713,25 @@ async def detect_webcam_frame(request: Request) -> JSONResponse:
 async def serve_output(filename: str, download: str = "false") -> Response:
     """Serve processed video files with HTTP Range support and optional download attachment."""
 
-    base_name = Path(filename).name
-    if not base_name or base_name in (".", ".."):
+    clean_name = Path(filename).name
+    if not clean_name or clean_name in (".", ".."):
         return JSONResponse({"error": "Invalid file path"}, status_code=400)
-
-    target_path = OUTPUT_FOLDER / base_name
-
+        
+    matched_path: Path | None = None
     try:
         resolved_root = OUTPUT_FOLDER.resolve()
-        resolved_target = target_path.resolve()
+        for existing_file in resolved_root.iterdir():
+            if existing_file.is_file() and existing_file.name == clean_name:
+                matched_path = existing_file.resolve()
+                break
+    except Exception:
+        matched_path = None
 
-        if not resolved_target.is_relative_to(resolved_root) or not resolved_target.is_file():
+    if matched_path is None or not matched_path.is_file():
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    try:
+        if not matched_path.is_relative_to(resolved_root):
             return JSONResponse({"error": "File not found"}, status_code=404)
     except (ValueError, RuntimeError):
         return JSONResponse({"error": "File not found"}, status_code=404)
@@ -731,9 +739,9 @@ async def serve_output(filename: str, download: str = "false") -> Response:
     as_attachment = download.lower() in ("true", "1", "yes")
     disposition = "attachment" if as_attachment else "inline"
     return FileResponse(
-        path=str(resolved_target),
+        path=str(matched_path),
         media_type="video/mp4",
-        filename=resolved_target.name if as_attachment else None,
+        filename=matched_path.name if as_attachment else None,
         content_disposition_type=disposition,
     )
 
