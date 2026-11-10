@@ -229,5 +229,4 @@ This entire project is licensed under the **AGPL-3.0** to comply with the licens
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/luongminhngoc)
 ---
 
-**Last Updated:** November 11, 2026 
-**Status:** ✅ Production Ready (v2.0.0)
+**Last Updated:** November 11, 2026 | **Status:** ✅ Production Ready
