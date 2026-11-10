@@ -391,7 +391,7 @@
                     </div>
                     <p id="videoResultText"></p>
                     <h3 style="color: #667eea; margin-top: 20px; margin-bottom: 15px;">🎬 Detection Output</h3>
-                    <video id="outputVideo" width="100%" height="auto" controls style="border-radius: 8px; margin-bottom: 15px; display: none;">
+                    <video id="outputVideo" width="100%" height="auto" controls preload="auto" style="border-radius: 8px; margin-bottom: 15px; display: none;">
                         Your browser does not support the video tag.
                     </video>
                     <a id="downloadLink" class="download-link" target="_blank">⬇️ Download Output Video</a>
@@ -505,7 +505,7 @@
 
         <div class="footer text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
             <p class="mb-1 text-white-50">
-                🚀 YOLOv12 Face Detection Web - Version 1.9.1 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
+                🚀 YOLOv12 Face Detection Web - Version 1.10.0 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
             </p>
             <p class="mb-0 small text-muted">
                 2026 &copy; Developed by <a href="mailto:luongminhngoc0@gmail.com">Ngoc M. Luong</a> with ❤️
@@ -705,7 +705,7 @@
                             return;
                         }
                         const formData = new FormData();
-                        formData.append('file', blob, 'webcam.jpg');
+                        formData.append('file', blob, 'webcam.jpg'); // Đảm bảo key là 'file'
                         formData.append('model', model);
                         formData.append('confidence', '0.5');
                         
@@ -759,6 +759,46 @@
         }, 100);
     }
 
+    function matchAndSmoothBoxes(current, target, alpha = 0.4) {
+        if (target.length === 0) return [];
+        if (current.length === 0) return target.map(b => ({ ...b }));
+    
+        const usedCurr = new Set();
+        return target.map(tb => {
+            const tcx = tb.x1 + tb.w * 0.5;
+            const tcy = tb.y1 + tb.h * 0.5;
+            const maxDistSq = Math.pow(Math.max(tb.w, tb.h) * 1.5, 2);
+    
+            let bestIdx = -1;
+            let bestDistSq = Infinity;
+    
+            for (let i = 0; i < current.length; i++) {
+                if (usedCurr.has(i)) continue;
+                const cb = current[i];
+                const ccx = cb.x1 + cb.w * 0.5;
+                const ccy = cb.y1 + cb.h * 0.5;
+                const distSq = (tcx - ccx) * (tcx - ccx) + (tcy - ccy) * (tcy - ccy);
+                if (distSq < bestDistSq && distSq <= maxDistSq) {
+                    bestDistSq = distSq;
+                    bestIdx = i;
+                }
+            }
+    
+            if (bestIdx !== -1) {
+                usedCurr.add(bestIdx);
+                const cb = current[bestIdx];
+                return {
+                    x1: cb.x1 + alpha * (tb.x1 - cb.x1),
+                    y1: cb.y1 + alpha * (tb.y1 - cb.y1),
+                    w: cb.w + alpha * (tb.w - cb.w),
+                    h: cb.h + alpha * (tb.h - cb.h),
+                    conf: tb.conf
+                };
+            }
+            return { ...tb };
+        });
+    }
+  
     function renderOverlayLoop() {
         if (!webcamRunning) return;
 
@@ -771,18 +811,7 @@
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         }
 
-        if (currentBoxes.length !== targetBoxes.length) {
-            currentBoxes = targetBoxes.map(b => ({ ...b }));
-        } else {
-            const alpha = 0.4;
-            for (let i = 0; i < targetBoxes.length; i++) {
-                currentBoxes[i].x1 += alpha * (targetBoxes[i].x1 - currentBoxes[i].x1);
-                currentBoxes[i].y1 += alpha * (targetBoxes[i].y1 - currentBoxes[i].y1);
-                currentBoxes[i].w  += alpha * (targetBoxes[i].w  - currentBoxes[i].w);
-                currentBoxes[i].h  += alpha * (targetBoxes[i].h  - currentBoxes[i].h);
-                currentBoxes[i].conf = targetBoxes[i].conf;
-            }
-        }
+        currentBoxes = matchAndSmoothBoxes(currentBoxes, targetBoxes, 0.4);
 
         if (overlayCtx) {
             overlayCtx.lineWidth = 3;
@@ -1274,8 +1303,8 @@
         document.getElementById('videoResultText').innerHTML =
             `✅ Video processing complete!<br><small>Total Frames: ${stats.total_frames || 0} | Total Detections: ${totalDet} | Speed: ${fpsVal} FPS</small>`;
 
-        const downloadUrl = data.download_url || data.video_url;
-        document.getElementById('downloadLink').href = `${downloadUrl}&download=1`;
+        const downloadUrl = data.download_url || `${data.video_url}?download=true`;
+        document.getElementById('downloadLink').href = downloadUrl;
         
         const outputVideo = document.getElementById('outputVideo');
         outputVideo.src = `${data.video_url}?t=${Date.now()}`;
@@ -1324,49 +1353,40 @@
         showMessage('videoMessage', '', '');
     }
 
-    function resetRatingForm() {
-        document.getElementById("ratingSection").style.display = "block";
-        document.getElementById("fbComment").value = "";
-        document.querySelectorAll('input[name="rating"]').forEach(s => s.checked = false);
-    }
+    function resetRatingBox(sectionId, commentId, radioName) {
+    document.getElementById(sectionId).style.display = "block";
+    document.getElementById(commentId).value = "";
+    document.querySelectorAll(`input[name="${radioName}"]`).forEach(s => s.checked = false);
+}
 
-    function resetVideoRatingForm() {
-        document.getElementById("videoRatingSection").style.display = "block";
-        document.getElementById("videoFbComment").value = "";
-        document.querySelectorAll('input[name="videoRating"]').forEach(s => s.checked = false);
-    }
-
-    async function sendFeedback(evt) {
-        const r = document.querySelector('input[name="rating"]:checked');
+    function resetRatingForm() { resetRatingBox("ratingSection", "fbComment", "rating"); }
+    function resetVideoRatingForm() { resetRatingBox("videoRatingSection", "videoFbComment", "videoRating"); }
+    
+    async function submitFeedbackCommon(evt, radioName, commentId, sectionId, suffix = "") {
+        const r = document.querySelector(`input[name="${radioName}"]:checked`);
         if (!r) { alert("Please choose stars!"); return; }
-        const btn = evt ? evt.currentTarget : event.target;
+        const btn = evt.currentTarget;
         btn.disabled = true;
         try {
             await fetch('/api/feedback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: lastFilename, model: lastModel, rating: r.value, comment: document.getElementById("fbComment").value })
+                body: JSON.stringify({
+                    filename: lastFilename,
+                    model: lastModel,
+                    rating: r.value,
+                    comment: document.getElementById(commentId).value + suffix
+                })
             });
             alert("Thank you! ❤️");
-            document.getElementById("ratingSection").style.display = "none";
-        } finally { btn.disabled = false; }
+            document.getElementById(sectionId).style.display = "none";
+        } finally {
+            btn.disabled = false;
+        }
     }
-
-    async function sendVideoFeedback(evt) {
-        const r = document.querySelector('input[name="videoRating"]:checked');
-        if (!r) { alert("Please choose stars!"); return; }
-        const btn = evt ? evt.currentTarget : event.target;
-        btn.disabled = true;
-        try {
-            await fetch('/api/feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: lastFilename, model: lastModel, rating: r.value, comment: document.getElementById("videoFbComment").value + " (Video)" })
-            });
-            alert("Thank you! ❤️");
-            document.getElementById("videoRatingSection").style.display = "none";
-        } finally { btn.disabled = false; }
-    }
+    
+    function sendFeedback(evt) { return submitFeedbackCommon(evt, "rating", "fbComment", "ratingSection"); }
+    function sendVideoFeedback(evt) { return submitFeedbackCommon(evt, "videoRating", "videoFbComment", "videoRatingSection", " (Video)"); }
 </script>
 </body>
 </html>
