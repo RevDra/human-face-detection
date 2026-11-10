@@ -82,9 +82,9 @@ graph TD
     
     Upload --> API_Detect
     API_Detect --> FastAPIBackend
-    FastAPIBackend --> |Chunked O(1) Stream to UPLOAD_FOLDER| YOLO_Engine
+    FastAPIBackend --> |"Chunked O(1) Stream to UPLOAD_FOLDER"| YOLO_Engine
     
-    Webcam --> |Send continuous frames| YOLO_Engine
+    Webcam --> |"Send continuous frames"| YOLO_Engine
     
     YOLO_Engine --> Results
     Results --> Display
@@ -95,7 +95,7 @@ graph TD
     Action_Download --> API_Download
     Action_Feedback --> API_Feedback
     
-    API_Feedback --> |Securely store telemetry| DB
+    API_Feedback --> |"Securely store telemetry"| DB
 
 ```
 
