@@ -20,6 +20,7 @@ import onnxruntime as ort
 DetectionDict = Dict[str, Any]
 ProgressCallback = Callable[[int, int], None]
 
+
 class YOLOv12FaceDetector:
     """Face detector using ONNX Runtime with YOLOv12 model."""
 
@@ -70,14 +71,10 @@ class YOLOv12FaceDetector:
 
         if use_cached_opt:
             load_target = opt_model_file
-            sess_options.graph_optimization_level = (
-                ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
-            )
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
         else:
             load_target = model_file
-            sess_options.graph_optimization_level = (
-                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            )
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             if os.access(model_file.parent, os.W_OK):
                 sess_options.optimized_model_filepath = str(opt_model_file)
 
@@ -92,9 +89,7 @@ class YOLOv12FaceDetector:
             )
         except Exception:
             sess_options.optimized_model_filepath = ""
-            sess_options.graph_optimization_level = (
-                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            )
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             self.session = ort.InferenceSession(
                 str(model_file), sess_options=sess_options, providers=providers
             )
@@ -108,47 +103,45 @@ class YOLOv12FaceDetector:
     def _get_buffers(self) -> Tuple[np.ndarray, np.ndarray]:
         """
         Get thread-local pre-allocated buffers for zero-copy preprocessing.
-    
+
         Returns:
             Tuple of (letterbox_buf, blob_buffer).
         """
         target_w, target_h = self.input_size
         if not hasattr(self._local, "letterbox_buf"):
-            self._local.letterbox_buf = np.full(
-                (target_h, target_w, 3), 114, dtype=np.uint8
-            )
+            self._local.letterbox_buf = np.full((target_h, target_w, 3), 114, dtype=np.uint8)
             self._local.blob_buffer = np.full(
                 (1, 3, target_h, target_w), 114.0 / 255.0, dtype=np.float32
             )
             self._local.last_box_dims = (0, 0)
         return self._local.letterbox_buf, self._local.blob_buffer
-    
+
     def preprocess(self, image: np.ndarray) -> Tuple[np.ndarray, float, Tuple[int, int]]:
         """
         Preprocess image for YOLOv12 inference using ROI-only letterbox normalization.
-    
+
         Args:
             image: Input BGR image (H, W, C).
-    
+
         Returns:
             Tuple of (input_tensor, scale, (pad_w, pad_h)).
         """
         orig_h, orig_w = image.shape[:2]
         target_w, target_h = self.input_size
-    
+
         scale = min(target_w / orig_w, target_h / orig_h)
         new_w = int(round(orig_w * scale))
         new_h = int(round(orig_h * scale))
-    
+
         pad_w = (target_w - new_w) // 2
         pad_h = (target_h - new_h) // 2
-    
+
         letterbox_buf, blob_buffer = self._get_buffers()
 
         if getattr(self._local, "last_box_dims", None) != (new_w, new_h):
             blob_buffer.fill(114.0 / 255.0)
             self._local.last_box_dims = (new_w, new_h)
-    
+
         resized_view = letterbox_buf[pad_h : pad_h + new_h, pad_w : pad_w + new_w]
         cv2.resize(
             image,
@@ -162,9 +155,9 @@ class YOLOv12FaceDetector:
         np.multiply(resized_view[:, :, 2], 1.0 / 255.0, out=blob_buffer[0, 0, y_slice, x_slice])
         np.multiply(resized_view[:, :, 1], 1.0 / 255.0, out=blob_buffer[0, 1, y_slice, x_slice])
         np.multiply(resized_view[:, :, 0], 1.0 / 255.0, out=blob_buffer[0, 2, y_slice, x_slice])
-    
+
         return blob_buffer, scale, (pad_w, pad_h)
-        
+
     def postprocess(
         self,
         outputs: List[np.ndarray],
@@ -188,17 +181,17 @@ class YOLOv12FaceDetector:
         """
         thresh = self.conf_threshold if conf_threshold is None else float(conf_threshold)
         predictions = np.squeeze(outputs[0])
-    
+
         if predictions.ndim == 2 and predictions.shape[0] < predictions.shape[1]:
             predictions = predictions.T
         if predictions.ndim != 2 or predictions.shape[1] < 5:
             return []
-    
+
         scores = predictions[:, 4]
         mask = scores >= thresh
         if not np.any(mask):
             return []
-    
+
         filtered_preds = predictions[mask]
         filtered_scores = scores[mask]
 
@@ -206,36 +199,34 @@ class YOLOv12FaceDetector:
         h = filtered_preds[:, 3]
         x = filtered_preds[:, 0] - w * 0.5
         y = filtered_preds[:, 1] - h * 0.5
-    
+
         nms_boxes = np.column_stack((x, y, w, h))
-        indices = cv2.dnn.NMSBoxes(
-            nms_boxes, filtered_scores, thresh, self.iou_threshold
-        )
+        indices = cv2.dnn.NMSBoxes(nms_boxes, filtered_scores, thresh, self.iou_threshold)
         if len(indices) == 0:
             return []
-    
+
         flat_idx = indices.flatten() if isinstance(indices, np.ndarray) else np.asarray(indices)
 
         pad_w, pad_h = pad
         orig_h, orig_w = orig_shape
         inv_scale = 1.0 / scale
-    
+
         sel_x = x[flat_idx]
         sel_y = y[flat_idx]
         sel_w = w[flat_idx]
         sel_h = h[flat_idx]
         sel_scores = filtered_scores[flat_idx]
-    
+
         x1 = np.clip((sel_x - pad_w) * inv_scale, 0, orig_w)
         y1 = np.clip((sel_y - pad_h) * inv_scale, 0, orig_h)
         x2 = np.clip((sel_x + sel_w - pad_w) * inv_scale, 0, orig_w)
         y2 = np.clip((sel_y + sel_h - pad_h) * inv_scale, 0, orig_h)
-    
+
         ix1 = np.rint(x1).astype(int)
         iy1 = np.rint(y1).astype(int)
         ix2 = np.rint(x2).astype(int)
         iy2 = np.rint(y2).astype(int)
-    
+
         return [
             {
                 "x1": int(ix1[i]),
@@ -249,9 +240,7 @@ class YOLOv12FaceDetector:
             for i in range(len(flat_idx))
         ]
 
-    def detect_faces(
-        self, image: np.ndarray, conf_threshold: Optional[float] = None
-    ) -> List[Dict]:
+    def detect_faces(self, image: np.ndarray, conf_threshold: Optional[float] = None) -> List[Dict]:
         """
         Detect faces in a single BGR image.
 
@@ -268,9 +257,7 @@ class YOLOv12FaceDetector:
         orig_shape = image.shape[:2]
         input_tensor, scale, pad = self.preprocess(image)
         outputs = self.session.run(self.output_names, {self.input_name: input_tensor})
-        return self.postprocess(
-            outputs, orig_shape, scale, pad, conf_threshold=conf_threshold
-        )
+        return self.postprocess(outputs, orig_shape, scale, pad, conf_threshold=conf_threshold)
 
     def draw_faces(
         self,
@@ -346,9 +333,7 @@ class YOLOv12FaceDetector:
                     label_y2 = label_y1 + text_h + baseline + 6
                     label_x2 = min(img_w, x1 + text_w + 8)
 
-                    cv2.rectangle(
-                        output, (x1, label_y1), (label_x2, label_y2), color, -1
-                    )
+                    cv2.rectangle(output, (x1, label_y1), (label_x2, label_y2), color, -1)
                     cv2.putText(
                         output,
                         conf_text,
@@ -431,8 +416,7 @@ class YOLOv12FaceDetector:
 
         dist_sq_mat = (ncx[:, None] - pcx[None, :]) ** 2 + (ncy[:, None] - pcy[None, :]) ** 2
         max_dist_sq = (
-            np.maximum(next_arr[:, 2] - next_arr[:, 0], next_arr[:, 3] - next_arr[:, 1]) ** 2
-            * 2.25
+            np.maximum(next_arr[:, 2] - next_arr[:, 0], next_arr[:, 3] - next_arr[:, 1]) ** 2 * 2.25
         )
 
         num_next = len(next_dets)
@@ -494,7 +478,7 @@ class YOLOv12FaceDetector:
                     }
                 )
         return results
-        
+
     @staticmethod
     def _interpolate_detections(
         prev_dets: List[DetectionDict],
@@ -518,7 +502,7 @@ class YOLOv12FaceDetector:
             return next_dets
         if alpha <= 0.0:
             return prev_dets
-    
+
         plan = YOLOv12FaceDetector._prepare_interpolation_plan(prev_dets, next_dets)
         if plan is None:
             return next_dets
@@ -532,7 +516,7 @@ class YOLOv12FaceDetector:
         blur_faces: bool = False,
         progress_callback=None,
         frame_stride: int = 4,
-        conf_threshold: Optional[float] = None
+        conf_threshold: Optional[float] = None,
     ) -> Dict:
         """
         Process a video file with 3-stage async pipeline, ring-buffer memory reuse,
@@ -593,9 +577,7 @@ class YOLOv12FaceDetector:
 
             if ffmpeg_proc is None:
                 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                out_cv2 = cv2.VideoWriter(
-                    str(output_path), fourcc, fps, (width, height)
-                )
+                out_cv2 = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
 
         num_slots = 3
         slot_buffers = [
@@ -629,9 +611,7 @@ class YOLOv12FaceDetector:
 
                         if frm is not buffers[i]:
                             if frm.shape[:2] != (height, width):
-                                cv2.resize(
-                                    frm, (width, height), dst=buffers[i]
-                                )
+                                cv2.resize(frm, (width, height), dst=buffers[i])
                             else:
                                 np.copyto(buffers[i], frm)
                         valid_count += 1
@@ -681,7 +661,7 @@ class YOLOv12FaceDetector:
         prev_thumb: Optional[np.ndarray] = None
         skipped_chunks = 0
         max_skip_chunks = 3
-        
+
         thumb_bgr_buf = np.empty((32, 32, 3), dtype=np.uint8)
         prev_thumb_buf = np.empty((32, 32), dtype=np.uint8)
         curr_thumb_buf = np.empty((32, 32), dtype=np.uint8)
@@ -750,9 +730,7 @@ class YOLOv12FaceDetector:
                             dets = self._evaluate_interpolation_plan(interp_plan, alpha)
 
                         if dets:
-                            self.draw_faces(
-                                frm, dets, blur_faces=blur_faces, inplace=True
-                            )
+                            self.draw_faces(frm, dets, blur_faces=blur_faces, inplace=True)
 
                     frame_count += 1
                     num_faces = len(dets)
@@ -842,9 +820,7 @@ class YOLOv12FaceDetector:
                     break
 
                 detections = self.detect_faces(frame)
-                self.draw_faces(
-                    frame, detections, blur_faces=blur_faces, inplace=True
-                )
+                self.draw_faces(frame, detections, blur_faces=blur_faces, inplace=True)
 
                 curr_time = time.time()
                 fps = 1.0 / max(curr_time - prev_time, 1e-6)
@@ -870,9 +846,7 @@ class YOLOv12FaceDetector:
 
 def main():
     """CLI Entry point."""
-    parser = argparse.ArgumentParser(
-        description="Human Face Detection using YOLOv12 ONNX"
-    )
+    parser = argparse.ArgumentParser(description="Human Face Detection using YOLOv12 ONNX")
     parser.add_argument(
         "--mode",
         type=str,
@@ -880,27 +854,17 @@ def main():
         choices=["image", "video", "webcam"],
         help="Detection mode: image, video, or webcam",
     )
-    parser.add_argument(
-        "--input", type=str, help="Path to input image or video file"
-    )
-    parser.add_argument(
-        "--output", type=str, help="Path to save output image or video"
-    )
-    parser.add_argument(
-        "--camera", type=int, default=0, help="Camera ID for webcam mode"
-    )
+    parser.add_argument("--input", type=str, help="Path to input image or video file")
+    parser.add_argument("--output", type=str, help="Path to save output image or video")
+    parser.add_argument("--camera", type=int, default=0, help="Camera ID for webcam mode")
     parser.add_argument(
         "--model",
         type=str,
         default="models/yolov12n-face.onnx",
         help="Path to ONNX model",
     )
-    parser.add_argument(
-        "--conf", type=float, default=0.5, help="Confidence threshold"
-    )
-    parser.add_argument(
-        "--iou", type=float, default=0.45, help="IoU threshold for NMS"
-    )
+    parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
+    parser.add_argument("--iou", type=float, default=0.45, help="IoU threshold for NMS")
     parser.add_argument(
         "--no-preview",
         action="store_true",
@@ -928,9 +892,7 @@ def main():
             raise ValueError(f"Failed to load image: {args.input}")
 
         detections = detector.detect_faces(image)
-        output_img = detector.draw_faces(
-            image, detections, blur_faces=args.blur
-        )
+        output_img = detector.draw_faces(image, detections, blur_faces=args.blur)
         print(f"Detected {len(detections)} face(s).")
 
         if args.output:
@@ -954,9 +916,7 @@ def main():
         print("Video Processing Complete:", stats)
 
     elif args.mode == "webcam":
-        detector.detect_from_webcam(
-            camera_id=args.camera, blur_faces=args.blur
-        )
+        detector.detect_from_webcam(camera_id=args.camera, blur_faces=args.blur)
 
 
 if __name__ == "__main__":
