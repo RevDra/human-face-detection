@@ -267,7 +267,7 @@
                     <button class="btn-secondary" onclick="clearImageForm()">🗑️ Clear</button>
                 </div>
 
-                <!-- 2-PHASE PROGRESS BAR CHO IMAGE -->
+                <!-- 2-PHASE PROGRESS BAR FOR IMAGE -->
                 <div class="progress" id="imageProgress" style="display: none; max-width: 520px; margin: 20px auto; padding: 20px; background: rgba(102, 126, 234, 0.08); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.2);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <span id="imageProgressStatus" style="font-weight: 600; color: #667eea;">📤 Uploading image...</span>
@@ -284,7 +284,6 @@
                 </div>
 
                 <div class="result-container" id="imageResult">
-                    <!-- Tối ưu Nhóm 1: Canvas render hình ảnh & box trực tiếp ở Client -->
                     <canvas id="resultCanvas" class="result-canvas"></canvas>
 
                     <div id="gallerySection" style="display: none; margin-bottom: 20px;">
@@ -367,7 +366,7 @@
                     <button class="btn-secondary" onclick="clearVideoForm()">🗑️ Clear</button>
                 </div>
 
-                <!-- 2-PHASE PROGRESS BAR CHO VIDEO -->
+                <!-- 2-PHASE PROGRESS BAR FOR VIDEO -->
                 <div class="progress" id="videoProgress" style="display: none; max-width: 520px; margin: 20px auto; padding: 20px; background: rgba(102, 126, 234, 0.08); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.2);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <span id="videoProgressStatus" style="font-weight: 600; color: #667eea;">📤 Uploading video...</span>
@@ -505,7 +504,7 @@
 
         <div class="footer text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
             <p class="mb-1 text-white-50">
-                🚀 YOLOv12 Face Detection Web - Version 1.10.0 | Powered by <strong class="text-white">Flask</strong> & <strong class="text-white">Ultralytics</strong>
+                🚀 YOLOv12 Face Detection Web - Version 2.0.0 | Powered by <strong class="text-white">FastAPI</strong> & <strong class="text-white">Ultralytics</strong>
             </p>
             <p class="mb-0 small text-muted">
                 2026 &copy; Developed by <a href="mailto:luongminhngoc0@gmail.com">Ngoc M. Luong</a> with ❤️
@@ -658,14 +657,17 @@
             webcamStream.getTracks().forEach(track => track.stop());
         }
         webcamRunning = false;
-        clearInterval(detectionInterval);
+        if (detectionInterval) {
+            clearTimeout(detectionInterval);
+            detectionInterval = null;
+        }
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        
+
         const startBtn = document.querySelector('#startWebcamBtn');
         const stopBtn = document.querySelector('#stopWebcamBtn');
         const statusIndicator = document.getElementById('webcamStatus');
         const statusDot = document.getElementById('statusIndicator');
-        
+
         startBtn.disabled = false;
         stopBtn.disabled = true;
         if (statusIndicator) statusIndicator.textContent = '🔴 Inactive';
@@ -673,7 +675,7 @@
             statusDot.classList.remove('active');
             statusDot.classList.add('inactive');
         }
-        
+
         if (overlayCtx) {
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
         }
@@ -686,117 +688,183 @@
 
     function startDetectionLoop() {
         startTime = Date.now();
-        detectionInterval = setInterval(async () => {
-            if (!webcamRunning || videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA || isProcessing) return;
-            
+        const MIN_INTERVAL_MS = 65; 
+
+        async function webcamTick() {
+            if (!webcamRunning) return;
+
+            if (videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA || isProcessing) {
+                detectionInterval = setTimeout(webcamTick, 25);
+                return;
+            }
+
             isProcessing = true;
+            const tickStart = performance.now();
             const model = document.getElementById('webcamModel').value;
-            
+
             try {
                 const scale = SEND_WIDTH / videoEl.videoWidth;
                 captureCanvas.width = SEND_WIDTH;
                 captureCanvas.height = Math.round(videoEl.videoHeight * scale);
                 captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
-                
-                captureCanvas.toBlob(async (blob) => {
-                    try {
-                        if (!blob || !webcamRunning) {
-                            isProcessing = false;
-                            return;
-                        }
-                        const formData = new FormData();
-                        formData.append('file', blob, 'webcam.jpg'); // Đảm bảo key là 'file'
-                        formData.append('model', model);
-                        formData.append('confidence', '0.5');
-                        
-                        const response = await fetch('/api/webcam-frame', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        const data = await response.json();
-                        
-                        if (data.success && webcamRunning) {
-                            frameCount++;
-                            const elapsed = Math.max(0.001, (Date.now() - startTime) / 1000);
-                            const fps = (frameCount / elapsed).toFixed(1);
-                            
-                            // Đọc đúng cấu trúc trả về từ object detections.count hoặc num_faces
-                            const faceCount = data.num_faces !== undefined ? data.num_faces : (data.detections.count || 0);
-                            document.getElementById('webcamFaces').textContent = faceCount;
-                            document.getElementById('webcamFPS').textContent = fps;
-                            document.getElementById('webcamDuration').textContent = elapsed.toFixed(1) + 's';
-                            
-                            const displayWidth = videoEl.clientWidth;
-                            const displayHeight = videoEl.clientHeight;
-                            const nativeWidth = videoEl.videoWidth || 640;
-                            const nativeHeight = videoEl.videoHeight || 480;
-                            
-                            const scale = Math.max(displayWidth / nativeWidth, displayHeight / nativeHeight);
-                            const renderedW = nativeWidth * scale;
-                            const renderedH = nativeHeight * scale;
-                            const offsetX = (displayWidth - renderedW) / 2;
-                            const offsetY = (displayHeight - renderedH) / 2;
-                            
-                            const boxesArr = data.detections.boxes || data.detections;
-                            targetBoxes = boxesArr.map(b => ({
-                                x1: b.x1 * (renderedW / data.frame_width) + offsetX,
-                                y1: b.y1 * (renderedH / data.frame_height) + offsetY,
-                                w: b.w * (renderedW / data.frame_width),
-                                h: b.h * (renderedH / data.frame_height),
-                                conf: b.conf !== undefined ? b.conf : b.confidence
-                            }));
-                        }
-                    } catch (err) {
-                        console.error('Webcam frame fetch error:', err);
-                    } finally {
-                        isProcessing = false;
+
+                const blob = await new Promise(resolve =>
+                    captureCanvas.toBlob(resolve, 'image/jpeg', 0.65)
+                );
+
+                if (blob && webcamRunning) {
+                    const formData = new FormData();
+                    formData.append('file', blob, 'webcam.jpg');
+                    formData.append('model', model);
+                    formData.append('confidence', '0.5');
+
+                    const response = await fetch('/api/webcam-frame', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+
+                    if (data.success && webcamRunning) {
+                        frameCount++;
+                        const elapsed = Math.max(0.001, (Date.now() - startTime) / 1000);
+                        const fps = (frameCount / elapsed).toFixed(1);
+
+                        const faceCount = data.num_faces !== undefined
+                            ? data.num_faces
+                            : (data.detections.count || 0);
+                        document.getElementById('webcamFaces').textContent = faceCount;
+                        document.getElementById('webcamFPS').textContent = fps;
+                        document.getElementById('webcamDuration').textContent = elapsed.toFixed(1) + 's';
+
+                        const displayWidth = videoEl.clientWidth;
+                        const displayHeight = videoEl.clientHeight;
+                        const nativeWidth = videoEl.videoWidth || 640;
+                        const nativeHeight = videoEl.videoHeight || 480;
+
+                        const renderScale = Math.max(displayWidth / nativeWidth, displayHeight / nativeHeight);
+                        const renderedW = nativeWidth * renderScale;
+                        const renderedH = nativeHeight * renderScale;
+                        const offsetX = (displayWidth - renderedW) / 2;
+                        const offsetY = (displayHeight - renderedH) / 2;
+
+                        const boxesArr = data.detections.boxes || data.detections;
+                        const scaleX = renderedW / data.frame_width;
+                        const scaleY = renderedH / data.frame_height;
+
+                        targetBoxes = boxesArr.map(b => ({
+                            x1: b.x1 * scaleX + offsetX,
+                            y1: b.y1 * scaleY + offsetY,
+                            w: b.w * scaleX,
+                            h: b.h * scaleY,
+                            conf: b.conf !== undefined ? b.conf : b.confidence
+                        }));
                     }
-                }, 'image/jpeg', 0.65);
+                }
             } catch (err) {
-                console.error('Capture frame error:', err);
+                console.error('Webcam frame fetch error:', err);
+            } finally {
                 isProcessing = false;
+                if (webcamRunning) {
+                    const rpcDuration = performance.now() - tickStart;
+                    const nextDelay = Math.max(10, MIN_INTERVAL_MS - rpcDuration);
+                    detectionInterval = setTimeout(webcamTick, nextDelay);
+                }
             }
-        }, 100);
+        }
+
+        webcamTick();
     }
 
+    const _usedMatchFlags = [];
+
     function matchAndSmoothBoxes(current, target, alpha = 0.4) {
-        if (target.length === 0) return [];
-        if (current.length === 0) return target.map(b => ({ ...b }));
-    
-        const usedCurr = new Set();
-        return target.map(tb => {
+        const tLen = target.length;
+        if (tLen === 0) {
+            current.length = 0;
+            return current;
+        }
+        const cLen = current.length;
+        if (cLen === 0) {
+            for (let i = 0; i < tLen; i++) current.push({ ...target[i] });
+            return current;
+        }
+
+        for (let i = 0; i < cLen; i++) _usedMatchFlags[i] = false;
+
+        if (cLen === tLen) {
+            for (let t = 0; t < tLen; t++) {
+                const tb = target[t];
+                const tcx = tb.x1 + tb.w * 0.5;
+                const tcy = tb.y1 + tb.h * 0.5;
+                const maxSide = Math.max(tb.w, tb.h) * 1.5;
+                const maxDistSq = maxSide * maxSide;
+
+                let bestIdx = -1;
+                let bestDistSq = Infinity;
+
+                for (let i = 0; i < cLen; i++) {
+                    if (_usedMatchFlags[i]) continue;
+                    const cb = current[i];
+                    const dx = tcx - (cb.x1 + cb.w * 0.5);
+                    const dy = tcy - (cb.y1 + cb.h * 0.5);
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < bestDistSq && distSq <= maxDistSq) {
+                        bestDistSq = distSq;
+                        bestIdx = i;
+                    }
+                }
+
+                if (bestIdx !== -1) {
+                    _usedMatchFlags[bestIdx] = true;
+                    const cb = current[bestIdx];
+                    cb.x1 += alpha * (tb.x1 - cb.x1);
+                    cb.y1 += alpha * (tb.y1 - cb.y1);
+                    cb.w += alpha * (tb.w - cb.w);
+                    cb.h += alpha * (tb.h - cb.h);
+                    cb.conf = tb.conf;
+                }
+            }
+            return current;
+        }
+
+        const nextCurr = new Array(tLen);
+        for (let t = 0; t < tLen; t++) {
+            const tb = target[t];
             const tcx = tb.x1 + tb.w * 0.5;
             const tcy = tb.y1 + tb.h * 0.5;
-            const maxDistSq = Math.pow(Math.max(tb.w, tb.h) * 1.5, 2);
-    
+            const maxSide = Math.max(tb.w, tb.h) * 1.5;
+            const maxDistSq = maxSide * maxSide;
+
             let bestIdx = -1;
             let bestDistSq = Infinity;
-    
-            for (let i = 0; i < current.length; i++) {
-                if (usedCurr.has(i)) continue;
+
+            for (let i = 0; i < cLen; i++) {
+                if (_usedMatchFlags[i]) continue;
                 const cb = current[i];
-                const ccx = cb.x1 + cb.w * 0.5;
-                const ccy = cb.y1 + cb.h * 0.5;
-                const distSq = (tcx - ccx) * (tcx - ccx) + (tcy - ccy) * (tcy - ccy);
+                const dx = tcx - (cb.x1 + cb.w * 0.5);
+                const dy = tcy - (cb.y1 + cb.h * 0.5);
+                const distSq = dx * dx + dy * dy;
                 if (distSq < bestDistSq && distSq <= maxDistSq) {
                     bestDistSq = distSq;
                     bestIdx = i;
                 }
             }
-    
+
             if (bestIdx !== -1) {
-                usedCurr.add(bestIdx);
+                _usedMatchFlags[bestIdx] = true;
                 const cb = current[bestIdx];
-                return {
+                nextCurr[t] = {
                     x1: cb.x1 + alpha * (tb.x1 - cb.x1),
                     y1: cb.y1 + alpha * (tb.y1 - cb.y1),
                     w: cb.w + alpha * (tb.w - cb.w),
                     h: cb.h + alpha * (tb.h - cb.h),
                     conf: tb.conf
                 };
+            } else {
+                nextCurr[t] = { ...tb };
             }
-            return { ...tb };
-        });
+        }
+        return nextCurr;
     }
   
     function renderOverlayLoop() {
@@ -931,7 +999,6 @@
             const { x1, y1, w, h, confidence } = det;
             const confPct = (confidence * 100).toFixed(1) + '%';
 
-            // Trích xuất Face Gallery trực tiếp bằng Canvas tại Client
             const cropCanvas = document.createElement('canvas');
             cropCanvas.width = 64;
             cropCanvas.height = 64;
@@ -945,7 +1012,6 @@
             cropCtx.filter = 'none';
             gallery.appendChild(cropCanvas);
 
-            // Xử lý vẽ Privacy Mode (Blur) hoặc Bounding Box
             if (blurFaces) {
                 ctx.save();
                 ctx.beginPath();
@@ -1012,7 +1078,6 @@
         const uploadStartTime = performance.now();
 
         try {
-            // Hướng 3: Nén ảnh ở client
             const { uploadBlob, bitmap } = await compressImageBeforeUpload(file, 1920, 0.85);
             imageBitmap = bitmap;
 
@@ -1021,7 +1086,7 @@
             formData.append('model', model);
             formData.append('blur_faces', blur);
             formData.append('confidence', document.getElementById('imageModel').value ? '0.5' : '0.5');
-            formData.append('return_mode', 'coords'); // Hướng 1: Chỉ nhận tọa độ JSON nhẹ
+            formData.append('return_mode', 'coords');
 
             const data = await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
@@ -1104,10 +1169,8 @@
             const count = data.num_faces !== undefined ? data.num_faces : 0;
             document.getElementById('faceCount').textContent = count;
 
-            // Hướng 1: Vẽ trực tiếp lên Canvas tại Client
             renderClientSideDetections(imageBitmap, data.detections, blur);
 
-            // Điền danh sách vào Detail List
             const facesList = document.getElementById('facesList');
             const toggleBtn = document.getElementById('toggleFacesBtn');
             if (facesList && toggleBtn) {
@@ -1146,7 +1209,7 @@
         if (!file) { showMessage('videoMessage', 'Please select a video', 'error'); return; }
 
         const formData = new FormData();
-        formData.append('video', file); // Khớp hoàn toàn với request.files['video'] trong web_app.py
+        formData.append('video', file);
         formData.append('model', model);
         formData.append('blur_faces', blur ? 'true' : 'false');
         formData.append('confidence', '0.5');
@@ -1231,11 +1294,9 @@
                 throw new Error("No job_id returned from server");
             }
 
-            // Kích hoạt thanh tiến trình chuyển sang chế độ AI Inference chạy qua SSE
             setProgressValue(progressBar, progressPercent, 0, true);
             progressBar.classList.add('progress-bar-animated');
 
-            // Hướng 2: Lắng nghe tiến độ qua Server-Sent Events (SSE)
             const evtSource = new EventSource('/api/video-stream/' + data.job_id);
 
             evtSource.onmessage = (event) => {

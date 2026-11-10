@@ -96,6 +96,8 @@ class YOLOv12FaceDetector:
 
         self.input_name = self.session.get_inputs()[0].name
         self.output_names = [out.name for out in self.session.get_outputs()]
+
+        # Thread-local buffers to avoid race conditions across concurrent requests
         self._local = threading.local()
 
     def _get_buffers(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -303,7 +305,9 @@ class YOLOv12FaceDetector:
                 if roi_w >= 16 and roi_h >= 16:
                     small_w = max(2, roi_w // 8)
                     small_h = max(2, roi_h // 8)
-                    small = cv2.resize(face_roi, (small_w, small_h), interpolation=cv2.INTER_LINEAR)
+                    small = cv2.resize(
+                        face_roi, (small_w, small_h), interpolation=cv2.INTER_NEAREST
+                    )
                     small = cv2.GaussianBlur(small, (5, 5), 0)
                     cv2.resize(
                         small,
@@ -379,6 +383,103 @@ class YOLOv12FaceDetector:
         return crops
 
     @staticmethod
+    def _prepare_interpolation_plan(
+        prev_dets: Optional[List[DetectionDict]],
+        next_dets: Optional[List[DetectionDict]],
+    ) -> Optional[Tuple[np.ndarray, np.ndarray, List[Optional[DetectionDict]]]]:
+        """
+        Precompute matched bounding box deltas once per frame chunk in O(N * M) time.
+
+        Args:
+            prev_dets: Detections from the previous keyframe.
+            next_dets: Detections from the current/next keyframe.
+
+        Returns:
+            Tuple of (base_boxes, delta_boxes, unmatched_fallbacks) or None if no interpolation needed.
+        """
+        if not next_dets or not prev_dets:
+            return None
+
+        prev_arr = np.array(
+            [[d["x1"], d["y1"], d["x2"], d["y2"], d["confidence"]] for d in prev_dets],
+            dtype=np.float32,
+        )
+        next_arr = np.array(
+            [[d["x1"], d["y1"], d["x2"], d["y2"], d["confidence"]] for d in next_dets],
+            dtype=np.float32,
+        )
+
+        pcx = (prev_arr[:, 0] + prev_arr[:, 2]) * 0.5
+        pcy = (prev_arr[:, 1] + prev_arr[:, 3]) * 0.5
+        ncx = (next_arr[:, 0] + next_arr[:, 2]) * 0.5
+        ncy = (next_arr[:, 1] + next_arr[:, 3]) * 0.5
+
+        dist_sq_mat = (ncx[:, None] - pcx[None, :]) ** 2 + (ncy[:, None] - pcy[None, :]) ** 2
+        max_dist_sq = (
+            np.maximum(next_arr[:, 2] - next_arr[:, 0], next_arr[:, 3] - next_arr[:, 1]) ** 2 * 2.25
+        )
+
+        num_next = len(next_dets)
+        base_arr = np.zeros((num_next, 5), dtype=np.float32)
+        delta_arr = np.zeros((num_next, 5), dtype=np.float32)
+        unmatched: List[Optional[DetectionDict]] = [None] * num_next
+
+        avail_mask = np.ones(len(prev_dets), dtype=bool)
+
+        for i in range(num_next):
+            if not np.any(avail_mask):
+                unmatched[i] = next_dets[i]
+                continue
+
+            row_dists = np.where(avail_mask, dist_sq_mat[i], np.inf)
+            best_j = int(np.argmin(row_dists))
+
+            if row_dists[best_j] <= max_dist_sq[i]:
+                avail_mask[best_j] = False
+                base_arr[i] = prev_arr[best_j]
+                delta_arr[i] = next_arr[i] - prev_arr[best_j]
+            else:
+                unmatched[i] = next_dets[i]
+
+        return base_arr, delta_arr, unmatched
+
+    @staticmethod
+    def _evaluate_interpolation_plan(
+        plan: Tuple[np.ndarray, np.ndarray, List[Optional[DetectionDict]]],
+        alpha: float,
+    ) -> List[DetectionDict]:
+        """
+        Evaluate precomputed interpolation plan at weight alpha in O(N) time.
+        """
+        base_arr, delta_arr, unmatched = plan
+        blended_all = base_arr + alpha * delta_arr
+        coords_int = np.rint(blended_all[:, :4]).astype(int)
+
+        results: List[DetectionDict] = []
+        for i, fallback in enumerate(unmatched):
+            if fallback is not None:
+                results.append(fallback)
+            else:
+                ix1, iy1, ix2, iy2 = (
+                    int(coords_int[i, 0]),
+                    int(coords_int[i, 1]),
+                    int(coords_int[i, 2]),
+                    int(coords_int[i, 3]),
+                )
+                results.append(
+                    {
+                        "x1": ix1,
+                        "y1": iy1,
+                        "x2": ix2,
+                        "y2": iy2,
+                        "w": max(1, ix2 - ix1),
+                        "h": max(1, iy2 - iy1),
+                        "confidence": float(blended_all[i, 4]),
+                    }
+                )
+        return results
+
+    @staticmethod
     def _interpolate_detections(
         prev_dets: List[DetectionDict],
         next_dets: List[DetectionDict],
@@ -402,64 +503,10 @@ class YOLOv12FaceDetector:
         if alpha <= 0.0:
             return prev_dets
 
-        prev_arr = np.array(
-            [[d["x1"], d["y1"], d["x2"], d["y2"], d["confidence"]] for d in prev_dets],
-            dtype=np.float32,
-        )
-        next_arr = np.array(
-            [[d["x1"], d["y1"], d["x2"], d["y2"], d["confidence"]] for d in next_dets],
-            dtype=np.float32,
-        )
-
-        pcx = (prev_arr[:, 0] + prev_arr[:, 2]) * 0.5
-        pcy = (prev_arr[:, 1] + prev_arr[:, 3]) * 0.5
-        ncx = (next_arr[:, 0] + next_arr[:, 2]) * 0.5
-        ncy = (next_arr[:, 1] + next_arr[:, 3]) * 0.5
-
-        dist_sq_mat = (ncx[:, None] - pcx[None, :]) ** 2 + (ncy[:, None] - pcy[None, :]) ** 2
-        max_dist_sq = (
-            np.maximum(next_arr[:, 2] - next_arr[:, 0], next_arr[:, 3] - next_arr[:, 1]) ** 2 * 2.25
-        )
-
-        interpolated: List[DetectionDict] = []
-        used_prev: set[int] = set()
-
-        for i, nd in enumerate(next_dets):
-            row_dists = dist_sq_mat[i]
-            order = np.argsort(row_dists)
-            matched_j = -1
-            for j in order:
-                idx_j = int(j)
-                if row_dists[idx_j] > max_dist_sq[i]:
-                    break
-                if idx_j not in used_prev:
-                    matched_j = idx_j
-                    break
-
-            if matched_j != -1:
-                used_prev.add(matched_j)
-                blended = prev_arr[matched_j] + alpha * (next_arr[i] - prev_arr[matched_j])
-                ix1, iy1, ix2, iy2 = (
-                    int(round(float(blended[0]))),
-                    int(round(float(blended[1]))),
-                    int(round(float(blended[2]))),
-                    int(round(float(blended[3]))),
-                )
-                interpolated.append(
-                    {
-                        "x1": ix1,
-                        "y1": iy1,
-                        "x2": ix2,
-                        "y2": iy2,
-                        "w": max(1, ix2 - ix1),
-                        "h": max(1, iy2 - iy1),
-                        "confidence": float(blended[4]),
-                    }
-                )
-            else:
-                interpolated.append(nd)
-
-        return interpolated
+        plan = YOLOv12FaceDetector._prepare_interpolation_plan(prev_dets, next_dets)
+        if plan is None:
+            return next_dets
+        return YOLOv12FaceDetector._evaluate_interpolation_plan(plan, alpha)
 
     def detect_from_video(
         self,
@@ -484,7 +531,6 @@ class YOLOv12FaceDetector:
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_stride = max(1, int(frame_stride))
-
         ffmpeg_proc = None
         out_cv2 = None
 
@@ -562,6 +608,7 @@ class YOLOv12FaceDetector:
                         ret, frm = cap.read(buffers[i])
                         if not ret:
                             break
+
                         if frm is not buffers[i]:
                             if frm.shape[:2] != (height, width):
                                 cv2.resize(frm, (width, height), dst=buffers[i])
@@ -615,6 +662,10 @@ class YOLOv12FaceDetector:
         skipped_chunks = 0
         max_skip_chunks = 3
 
+        thumb_bgr_buf = np.empty((32, 32, 3), dtype=np.uint8)
+        prev_thumb_buf = np.empty((32, 32), dtype=np.uint8)
+        curr_thumb_buf = np.empty((32, 32), dtype=np.uint8)
+        has_prev_thumb = False
         try:
             while not stop_event.is_set():
                 item = decode_q.get()
@@ -627,39 +678,57 @@ class YOLOv12FaceDetector:
                 if prev_dets is None:
                     first_frame = buffers[0]
                     prev_dets = self.detect_faces(first_frame, conf_threshold=conf_threshold)
-                    small_bgr = cv2.resize(first_frame, (32, 32), interpolation=cv2.INTER_NEAREST)
-                    prev_thumb = cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY)
+                    cv2.resize(
+                        first_frame,
+                        (32, 32),
+                        dst=thumb_bgr_buf,
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+                    cv2.cvtColor(thumb_bgr_buf, cv2.COLOR_BGR2GRAY, dst=prev_thumb_buf)
+                    has_prev_thumb = True
 
                 if chunk_len == 1:
                     next_dets = prev_dets
                 else:
                     last_frame = buffers[chunk_len - 1]
-                    small_bgr = cv2.resize(last_frame, (32, 32), interpolation=cv2.INTER_NEAREST)
-                    curr_thumb = cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY)
-                    motion_diff = float(cv2.absdiff(curr_thumb, prev_thumb).mean())
+                    cv2.resize(
+                        last_frame,
+                        (32, 32),
+                        dst=thumb_bgr_buf,
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+                    cv2.cvtColor(thumb_bgr_buf, cv2.COLOR_BGR2GRAY, dst=curr_thumb_buf)
+                    motion_diff = (
+                        float(cv2.absdiff(curr_thumb_buf, prev_thumb_buf).mean())
+                        if has_prev_thumb
+                        else 999.0
+                    )
 
                     if motion_diff < 1.2 and skipped_chunks < max_skip_chunks:
                         next_dets = prev_dets
                         skipped_chunks += 1
                     else:
                         next_dets = self.detect_faces(last_frame, conf_threshold=conf_threshold)
-                        prev_thumb = curr_thumb
+                        np.copyto(prev_thumb_buf, curr_thumb_buf)
                         skipped_chunks = 0
 
                 both_empty = (not prev_dets) and (not next_dets)
+                interp_plan = (
+                    None
+                    if (both_empty or chunk_len <= 1 or prev_dets is next_dets)
+                    else self._prepare_interpolation_plan(prev_dets, next_dets)
+                )
 
                 for i in range(chunk_len):
                     frm = buffers[i]
                     dets: List[DetectionDict] = []
-                    if both_empty:
-                        dets = []
-                    else:
-                        alpha = (i + 1) / chunk_len
-                        dets = (
-                            self._interpolate_detections(prev_dets, next_dets, alpha)
-                            if i < chunk_len - 1
-                            else next_dets
-                        )
+                    if not both_empty:
+                        if i == chunk_len - 1 or prev_dets is next_dets or interp_plan is None:
+                            dets = next_dets or []
+                        else:
+                            alpha = (i + 1) / chunk_len
+                            dets = self._evaluate_interpolation_plan(interp_plan, alpha)
+
                         if dets:
                             self.draw_faces(frm, dets, blur_faces=blur_faces, inplace=True)
 

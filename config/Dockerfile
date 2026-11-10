@@ -13,9 +13,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN mkdir -p data/uploads data/samples data/outputs && chmod -R 777 /app
+
+RUN mkdir -p uploads outputs && chmod -R 777 /app
 
 EXPOSE 7860
+
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:7860", "--workers", "1", "--threads", "4", "--worker-class", "gthread", "--timeout", "120", "--pythonpath", "src", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info", "web_app:app"]
+CMD ["uvicorn", "src.web_app:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]

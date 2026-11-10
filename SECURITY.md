@@ -2,13 +2,13 @@
 
 ## 📦 Supported Versions
 
-Only the latest stable release and current major line are supported with security updates.
+Only the latest major release line and current stable version are supported with security updates.
 
 | Version | Supported          | Notes |
 | :-----: | :----------------: | :---- |
-| 1.10.x | :white_check_mark: | **Latest (Fastest and lightest processing)** |
-| 1.9.x | :warning: | Deprecated legacy (SSE video stream, no further updates) |
-| 1.0.x - 1.8.x | :x:        | Vulnerable / Unsupported |
+| 2.x.x   | :white_check_mark: | **Latest (Fastest, async-powered, FastAPI & ONNX Runtime)** |
+| 1.10.x  | :warning:          | Legacy / Maintenance mode (Flask-based) |
+| < 1.10  | :x:                | Vulnerable / Unsupported |
 
 ## 🐞 Reporting a Vulnerability
 
@@ -40,13 +40,13 @@ Please include:
 ## 🔒 Security Scope
 
 ### In Scope
-- Vulnerabilities in the Flask Web Application code (`src/web_app.py`).
-- Issues with the ONNX Runtime face detection engine (`src/face_detection_yolov12.py`).
-- Issues with the Docker configuration (`Dockerfile`, `docker-compose.yml`)[cite: 5].
+- Vulnerabilities in the FastAPI Web Application code (`src/web_app.py`).
+- Issues with the ONNX Runtime face detection engine (`src/face_detector.py`).
+- Issues with the Docker configuration (`Dockerfile`, `docker-compose.yml`).
 - Cross-Site Scripting (XSS), insecure model loading, or unsafe File Upload/Processing vulnerabilities in the web interface.
 
 ### Out of Scope
-- Vulnerabilities in third-party inference libraries (e.g., `onnxruntime`, `opencv-python`, `flask`). Please report those to the respective maintainers.
+- Vulnerabilities in third-party inference libraries (e.g., `onnxruntime`, `opencv-python`, `fastapi`). Please report those to the respective maintainers.
 - Attacks requiring physical access to the user's device.
 - Spam or social engineering attacks.
 
