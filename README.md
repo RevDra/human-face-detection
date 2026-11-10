@@ -1,4 +1,4 @@
-# 🔍 YOLOv12 Human Face Detection Web Application
+# 🔍 YOLOv12 Human Face Detection Web Application (v2.0.0)
 
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/RevDra/YOLOv12_HFD)
 [![License: AGPL v3](https://img.shields.io/badge/%E2%9A%96%EF%B8%8F_License-AGPL_v3-blue.svg)](LICENSE)
@@ -12,27 +12,26 @@
 </div>
 <br>
 
-A professional, real-time face detection system built with **YOLOv12 INT8 ONNX Runtime** and Flask. This project leverages the latest Attention Mechanism features of YOLOv12 combined with **Static INT8 Quantization** to detect faces in images, videos, and live webcam streams with state-of-the-art accuracy, ultra-low latency, and zero-PyTorch architecture footprint.
+A professional, real-time high-performance face detection system built with **YOLOv12 INT8 ONNX Runtime** and **FastAPI**. Powered by an asynchronous ASGI architecture, thread-pool execution, O(1) memory chunked file uploads, and a modern browser client-side canvas rendering pipeline, this project delivers state-of-the-art accuracy with ultra-low latency and zero-PyTorch footprint.
 
 View the demo using this [link](https://revdra-yolov12-hfd.hf.space/).
 
 ## ✨ Features
 
 ### 📷 Image & Video Detection
-- Upload and detect faces in images (JPG, PNG) and videos (MP4, AVI, MOV).
+- Upload and detect faces in images (JPG, PNG, WEBP) and videos (MP4, AVI, MOV, MKV).
 - Attention-based detection for small, distant, or occluded faces.
-- Interactive bounding boxes with cropped face previews.
-- Download annotated results and face statistics.
-- Privacy mode for images is here to blur faces in the output.
+- Client-side direct canvas rendering with interactive bounding boxes and face gallery crops.
+- Real-time Server-Sent Events (SSE) stream progress bar for video processing jobs.
+- Privacy mode to automatically blur faces in the output media.
 
 ### 📹 Live Webcam
-- Real-time detection directly from your browser.
-- Side-by-side video feed and detection results.
+- Real-time asynchronous detection directly from your browser with adaptive webcam pacing.
+- Side-by-side video feed and smooth bounding box interpolation.
 - Live statistics (FPS, face count, duration).
 
 ### 📊 Feedback & Analytics
 - Built-in MySQL database integration (via Aiven) to collect user ratings and feedback securely.
-- Ready for admin dashboard visualization.
 
 ### 🤖 Pure INT8 ONNX Runtime Models
 All models are statically quantized to INT8, achieving over ~70% reduction in file size while maintaining state-of-the-art accuracy:
@@ -59,7 +58,7 @@ graph TD
     
     %% Backend & API
     API_Detect[/API: /api/detect-image & video/]
-    FlaskBackend[Flask Backend Server]
+    FastAPIBackend[FastAPI ASGI Backend Server]
     YOLO_Engine[YOLOv12 INT8 ONNX Inference Engine]
     
     %% Results & Post-processing
@@ -69,7 +68,7 @@ graph TD
     %% Actions & Telemetry
     Action_Download[Download Annotated Files]
     Action_Feedback[Submit Rating & Feedback]
-    API_Download[/API: /api/download/]
+    API_Download[/API: /outputs/filename/]
     API_Feedback[/API: /api/feedback/]
     DB[(Aiven MySQL Database)]
 
@@ -82,8 +81,8 @@ graph TD
     InputSelect -->|Real-time| Webcam
     
     Upload --> API_Detect
-    API_Detect --> FlaskBackend
-    FlaskBackend --> |Save temporary file to UPLOAD_FOLDER| YOLO_Engine
+    API_Detect --> FastAPIBackend
+    FastAPIBackend --> |Chunked O(1) Stream to UPLOAD_FOLDER| YOLO_Engine
     
     Webcam --> |Send continuous frames| YOLO_Engine
     
@@ -99,36 +98,6 @@ graph TD
     API_Feedback --> |Securely store telemetry| DB
 
 ```
-
----
-
-### Business Logic Detailed Explanation
-
-**1. Initialization & Configuration**
-
-* **User Interaction:** The user accesses the Web UI (hosted locally or via Hugging Face Spaces).
-* **Model Selection:** The system prompts the user to select a YOLOv12 model variant (Nano, Small, Medium, or Large). This allows the user to balance between blazing-fast inference speeds (ideal for webcams) and maximum precision (ideal for high-resolution static images).
-
-**2. Data Input Stage**
-The system routes the user through one of two primary data pipelines:
-
-* **Batch Processing (Static Files):** The user uploads image (JPG, PNG) or video (MP4, AVI, MOV) files. The frontend packages the payload and sends a POST request to the respective `/api/detect-image` or `/api/detect-video` endpoints.
-* **Real-Time Stream:** The user grants browser camera permissions. The frontend captures the live video feed and continuously pushes frames to the processing engine.
-
-**3. Core AI Inference**
-
-* **Request Handling:** The Flask Backend receives the data. For uploads, it temporarily stores the files in the `UPLOAD_FOLDER` (validating against the `MAX_FILE_SIZE` limit).
-* **YOLOv12 Processing:** The YOLOv12 ONNX Inference Engine is triggered. Utilizing its advanced Attention Mechanisms, it scans the input to detect human faces, calculating exact bounding box coordinates and assigning a Confidence Score based on the pre-configured threshold (default: `0.32`).
-
-**4. Post-Processing & Response**
-
-* **Data Aggregation:** The raw model outputs are synthesized into a structured JSON response (containing face count, coordinates, and inference duration) and returned to the client.
-* **Visualization:** The Web UI dynamically renders interactive bounding boxes over the media and updates real-time statistics (such as FPS and total faces detected).
-
-**5. User Actions & Telemetry**
-
-* **Retrieval:** Users can interact with the `/api/download/<filename>` endpoint to securely download their processed, annotated files.
-* **Feedback Loop:** To drive future improvements, users can submit ratings and comments. The frontend calls the /api/feedback endpoint, which securely inserts the telemetry data into the Aiven MySQL Database for future analytics.
 
 ---
 
@@ -164,7 +133,7 @@ cp .env.example .env
 
 ```
 
-*Open `.env` in a text editor and update the `DB_URL` with your MySQL connection string.*
+*Open `.env` in a text editor and update the database connection strings if needed.*
 
 4. **Run the web server:**
 
@@ -182,69 +151,33 @@ config\deploy.bat start
 
 ```
 
-5. **Open in browser:** Navigate to `https://localhost:7860`
+5. **Open in browser:** Navigate to `http://localhost:7860`
 
 ## 📁 Project Structure
 
 ```
 Human_face_detection/
-├── .github/                         # CI/CD & Automation
-│   ├── ISSUE_TEMPLATE/              # Community Forms
-│   │   ├── bug_report.md            # Bug report template
-│   │   ├── config.yml               # Discussions link config
-│   │   └── feature_request.md       # Feature request template
-│   ├── workflows/
-│   │   ├── docker-publish.yml       # Auto-build Docker Image
-|   |   ├── release.yml             # Automated Semantic Release CI/CD
-│   │   └── lint.yml                 # Quality Check (Black + Flake8 + isort + Mypy)
-│   ├── dependabot.yml               # Automated Dependency Updates
-│   └── FUNDING.yml                  # Sponsor settings
-│
-├── assets/                          # Project Images & Screenshots
-│   └── demo_ui.png                  # Interface preview for README
-│
-├── config/                          # Configuration & Deployment scripts
-│   ├── Dockerfile                   # Docker image config
-│   ├── docker-compose.yml           # Docker Compose setup
-│   ├── deploy.sh                    # Linux deployment script
-│   ├── deploy.bat                   # Windows deployment script
-│   └── DEPLOYMENT_GUIDE.md          # Detailed deployment guide
-│
-├── models/                          # YOLOv12 ONNX Models
-│   ├── yolov12n-face-int8.onnx           # Nano model
-│   ├── yolov12s-face-int8.onnx           # Small model
-│   ├── yolov12m-face-int8.onnx           # Medium model
-│   ├── MODELS.md                    # Download instructions for Med/Large models
-│   └── training/                    # Source code & benchmarks (Loss, PR curves, etc.)
-│
-├── src/                             # Source Code (Zero-PyTorch ONNX Runtime)
-│   ├── web_app.py                   # Flask web server
-│   └── face_detection_yolov12.py    # YOLOv12 detection engine (OpenCV + ONNX)
-│
-├── web/                             # Frontend Assets
+├── .github/                       # CI/CD & Automation
+│   ├── ISSUE_TEMPLATE/            # Community Forms
+│   ├── workflows/                 # Auto-build Docker & Semantic Release CI/CD
+│   └── dependabot.yml             # Automated Dependency Updates
+├── assets/                        # Project Images & Screenshots
+├── config/                        # Configuration & Deployment scripts (Dockerfile, Docker-Compose)
+├── models/                        # YOLOv12 ONNX Models & Training benchmarks
+├── src/                           # Source Code (FastAPI ASGI + ONNX Runtime)
+│   ├── web_app.py                 # FastAPI web server
+│   └── face_detector.py           # YOLOv12 detection engine (OpenCV + ONNX)
+├── web/                           # Frontend Assets
 │   └── templates/
-│       └── index.html               # Web UI
-│
-├── .flake8                          # Flake8 Configuration
-├── .dockerignore                    # Docker Ignore
-├── .gitignore                       # Git Ignore
-├── .gitattributes                   # Normalized code (LF)
-├── pyproject.toml                   # Black + Mypy + isort Configuration
-├── CODE_OF_CONDUCT.md               # Community guidelines
-├── CONTRIBUTING.md                  # Contribution guidelines
-├── LICENSE                          # AGPL v3 License
-├── README.md                        # Main documentation
-├── SECURITY.md                      # Security policy
-├── .env.example                     # Template for environment variables (DB credentials)
-└── requirements.txt                 # Python dependencies
+│       └── index.html             # Web UI
+├── requirements.txt               # Python dependencies
+└── README.md                      # Main documentation
 
 ```
 
 ## 🐳 Docker Support (Recommended)
 
-You can run the application instantly without needing to install Python or manually install dependencies.
-
-**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop) installed.
+You can run the application instantly using Docker.
 
 1. **Clone the repository:**
 
@@ -257,12 +190,7 @@ cd human-face-detection
 2. **Run with Docker Compose:**
 
 ```bash
-# Build and run with Docker Compose (from project root)
 docker-compose -f config/docker-compose.yml up --build
-
-# Or build manually
-docker build -t yolov12-face-detection -f config/Dockerfile .
-docker run -p 7860:7860 -v $(pwd)/data:/app/data yolov12-face-detection
 
 ```
 
@@ -275,148 +203,25 @@ Open `http://localhost:7860` in your browser.
 | --- | --- | --- |
 | GET | `/` | Web interface |
 | POST | `/api/detect-image` | Detect faces in uploaded image |
-| POST | `/api/detect-video` | Detect faces in uploaded video |
+| POST | `/api/detect-video` | Detect faces in uploaded video (with SSE stream) |
+| GET | `/api/video-stream/{job_id}` | Real-time video progress SSE stream |
 | GET | `/api/models` | List available models |
-| POST | `/api/feedback` | Submit user rating and comments to database |
+| POST | `/api/feedback` | Submit user rating and comments |
 | GET | `/api/health` | Health check |
-| GET | `/api/download/<filename>` | Download processed files |
-
-## 💻 Usage
-
-### Via Web Interface
-
-1. Select a detection model
-2. Upload an image/video or start webcam
-3. Wait for processing
-4. View results and download if needed
-
-### Via API (Python Example)
-
-```python
-import requests
-
-# Detect faces in image
-with open('image.jpg', 'rb') as f:
-    files = {'file': f}
-    data = {'model': 'yolov12l-face.onnx'}
-    response = requests.post('http://localhost:7860/api/detect-image', 
-                            files=files, data=data)
-    result = response.json()
-    
-print(f"Detected {result['detections']['count']} faces")
-
-```
-
-## 📊 Detection Details
-
-### Confidence Threshold
-
-Default: 0.32 (32%)
-
-* Higher threshold = fewer false positives but may miss faces
-* Lower threshold = more detections but more false positives
-
-### Output Includes
-
-* Bounding box coordinates (x1, y1, x2, y2)
-* Confidence score (0-100%)
-* Face dimensions (width × height)
-* Face position on image
-
-## ⚙️ Configuration
-
-Edit `web_app.py` to modify:
-
-* `MAX_FILE_SIZE` - Maximum upload size (default: 500MB)
-* `UPLOAD_FOLDER` - Temporary file location
-* `PORT` - Application port (default: 7860)
-
-## 📝 Notes
-
-### Model Files Required
-
-Model files are required in the `models/` directory:
-
-* `yolov12n-face-int8.onnx` ✅ Included
-* `yolov12s-face-int8.onnx` ✅ Included
-* `yolov12m-face-int8.onnx` ✅ Included
-* `yolov12l-face-int8.onnx` 📥 [Download](https://github.com/YapaLab/yolo-face), then use the pipeline in `models/` to help you transform ONNX FP32 to INT8
-
-**See [models/MODELS.md](https://www.google.com/search?q=models/MODELS.md) for detailed download instructions.**
-
-### Performance Tips
-
-1. Use YOLOv12 Nano for webcam to achieve high FPS.
-2. Use YOLOv12 Large for high-resolution static images.
-3. If running on Hugging Face Spaces (CPU), stick to Nano or Small models.
-
-### Browser Compatibility
-
-* Chrome/Edge: ✅ Full support
-* Firefox: ✅ Full support
-* Safari: ✅ Full support
-* IE: ❌ Not supported
-
-## 🐛 Troubleshooting
-
-### Models Not Found
-
-```
-FileNotFoundError: Model not found: models/yolov12m-face.onnx
-
-```
-
-**Solution:** Download missing models from [models/MODELS.md](https://www.google.com/search?q=models/MODELS.md). Only nano and small models are included by default.
-
-### Camera Permission Denied
-
-**Solution:** Grant camera permission in browser settings. If deploying on a remote server, you must use HTTPS for the webcam to work.
-
-### Out of Memory
-
-**Solution:** Use a smaller model (Nano) or reduce video resolution
-
-### Slow Detection
-
-**Solution:**
-
-* Use YOLOv12 Nano
-* Reduce input resolution
-* Check CPU/GPU usage
+| GET | `/outputs/{filename}` | Download or stream processed video files |
 
 ## 📚 References
 
-* [Model Setup Guide](https://www.google.com/search?q=models/MODELS.md) - Download and setup instructions
-* [YOLOv12-Face Repository](https://github.com/YapaLab/yolo-face) - Source of the models/weights.
 * [Ultralytics YOLOv12](https://docs.ultralytics.com/) - YOLOv12 documentation.
-* [Flask Documentation](https://flask.palletsprojects.com/)
+* [FastAPI Documentation](https://fastapi.tiangolo.com/)
 * [OpenCV Documentation](https://docs.opencv.org/)
 
 ## 🙏 Acknowledgements & Licenses
 
-This project uses the following open-source components:
-
-1. **YOLOv12** by Ultralytics:
-* License: [AGPL-3.0](https://github.com/ultralytics/ultralytics/blob/main/LICENSE)
-* Source: [https://github.com/ultralytics/ultralytics](https://github.com/ultralytics/ultralytics)
-
-
-2. **Face Detection Weights** inspired by YapaLab:
-* License: [GPL-3.0](https://github.com/YapaLab/yolo-face/blob/dev/LICENSE)
-* Source: [https://github.com/YapaLab/yolo-face](https://github.com/YapaLab/yolo-face)
-
-
-
-**Project License:**
-This entire project is licensed under the AGPL-3.0 to comply with the licensing terms of the YOLO ecosystem.
+Project licensed under the **AGPL-3.0** license.
 
 ## 💬 Support & Q&A
 
-[![Have a question?](https://img.shields.io/badge/Ask%20a%20Question-GitHub%20Discussions-blue?style=for-the-badge&logo=github)](https://github.com/RevDra/human-face-detection/discussions)
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/luongminhngoc)
-
 ---
 
-**Last Updated:** October 29, 2026 |
-**Status:** ✅ Production Ready
+**Last Updated:** June 2026 | **Status:** ✅ Production Ready (v2.0.0)
