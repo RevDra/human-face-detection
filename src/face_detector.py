@@ -650,6 +650,7 @@ class YOLOv12FaceDetector:
 
                 for i in range(chunk_len):
                     frm = buffers[i]
+                    dets: List[DetectionDict] = []
                     if both_empty:
                         dets = []
                     else:
