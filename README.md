@@ -1,4 +1,4 @@
-# 🔍 YOLOv12 Human Face Detection Web Application (v2.0.0)
+# 🔍 YOLOv12 Human Face Detection Web Application
 
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/RevDra/YOLOv12_HFD)
 [![License: AGPL v3](https://img.shields.io/badge/%E2%9A%96%EF%B8%8F_License-AGPL_v3-blue.svg)](LICENSE)
