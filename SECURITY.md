@@ -6,9 +6,9 @@ Only the latest stable release and current major line are supported with securit
 
 | Version | Supported          | Notes |
 | :-----: | :----------------: | :---- |
-| 1.5.x | :white_check_mark: | **Latest (Pure INT8 ONNX Runtime)** |
-| 1.4.x | :warning: | Deprecated legacy (Zero-PyTorch, no further updates) |
-| 1.0.x - 1.3.x | :x:        | Vulnerable / Unsupported |
+| 1.10.x | :white_check_mark: | **Latest (Fastest and lightest processing)** |
+| 1.9.x | :warning: | Deprecated legacy (SSE video stream, no further updates) |
+| 1.0.x - 1.8.x | :x:        | Vulnerable / Unsupported |
 
 ## 🐞 Reporting a Vulnerability
 
