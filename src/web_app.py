@@ -13,10 +13,13 @@ import time
 import uuid
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+from werkzeug.datastructures import FileStorage
 
 import cv2
+import math
 import numpy as np
+from face_detector import YOLOv12FaceDetector
 from flask import (
     Flask,
     Response,
@@ -27,8 +30,12 @@ from flask import (
     stream_with_context,
 )
 from werkzeug.utils import secure_filename
+from concurrent.futures import ThreadPoolExecutor
 
-from face_detector import YOLOv12FaceDetector
+MAX_VIDEO_WORKERS = int(os.environ.get("MAX_VIDEO_WORKERS", 2))
+video_executor = ThreadPoolExecutor(max_workers=MAX_VIDEO_WORKERS)
+_last_cleanup_ts: float = 0.0
+_cleanup_lock = threading.Lock()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +63,8 @@ app = Flask(
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["OUTPUT_FOLDER"] = str(OUTPUT_FOLDER)
+MAX_IMAGE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
+MAX_IMAGE_PIXELS = 8192 * 8192
 
 AVAILABLE_MODELS = {
     "yolov12n": "models/yolov12n-face.onnx",
@@ -71,23 +80,116 @@ detectors_lock = threading.Lock()
 video_jobs: dict[str, dict[str, Any]] = {}
 video_jobs_lock = threading.Lock()
 
+def _encode_jpeg_b64(image: np.ndarray, quality: int = 85) -> str:
+    """
+    Encode a BGR NumPy image into a Base64 JPEG string.
 
-def allowed_file(filename: str, allowed_extensions: set) -> bool:
-    """Check if filename has an allowed extension."""
+    Args:
+        image: Input BGR image array.
+        quality: JPEG compression quality (0 to 100).
+
+    Returns:
+        Base64-encoded JPEG string.
+    """
+    _, buffer = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    return base64.b64encode(buffer).decode("utf-8")
+
+
+def _decode_image_storage(
+    file_storage: FileStorage, max_bytes: int = MAX_IMAGE_SIZE_BYTES
+) -> np.ndarray | None:
+    """
+    Safely read and decode an image with byte-size and pixel-count protection.
+    """
+    data = file_storage.read(max_bytes + 1)
+    if not data or len(data) > max_bytes:
+        return None
+    file_bytes = np.frombuffer(data, np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    if image is None:
+        return None
+    h, w = image.shape[:2]
+    if h * w > MAX_IMAGE_PIXELS:
+        return None
+    return image
+
+def _format_detections(
+    detections: list[dict[str, Any]],
+    scale_percent: bool = False,
+    include_xy2: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Serialize raw detector outputs into standardized JSON-ready dictionaries.
+
+    Args:
+        detections: List of detection dicts from YOLOv12FaceDetector.
+        scale_percent: Multiply confidence by 100 and round to 2 decimals if True.
+        include_xy2: Include x2 and y2 keys in each item if True.
+
+    Returns:
+        Formatted list of detection dictionaries.
+    """
+    formatted: list[dict[str, Any]] = []
+    for idx, det in enumerate(detections, start=1):
+        conf = (
+            round(float(det["confidence"]) * 100, 2)
+            if scale_percent
+            else round(float(det["confidence"]), 4)
+        )
+        item: dict[str, Any] = {
+            "id": idx,
+            "x1": det["x1"],
+            "y1": det["y1"],
+            "w": det["w"],
+            "h": det["h"],
+            "confidence": conf,
+        }
+        if include_xy2:
+            item["x2"] = det["x2"]
+            item["y2"] = det["y2"]
+        formatted.append(item)
+    return formatted
+    
+def allowed_file(filename: str, allowed_extensions: set[str]) -> bool:
+    """
+    Check if a filename has an allowed extension.
+
+    Args:
+        filename: Name of the uploaded file.
+        allowed_extensions: Set of permitted lowercase file extensions.
+
+    Returns:
+        True if the file extension is valid, False otherwise.
+    """
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
 
+def cleanup_old_files(max_age_seconds: int = 3600, min_interval: int = 300) -> None:
+    """
+    Remove temporary uploaded/output files and job records older than max_age_seconds.
 
-def cleanup_old_files(max_age_seconds: int = 3600):
-    """Remove temporary uploaded and output files older than max_age_seconds."""
+    Args:
+        max_age_seconds: Maximum lifetime in seconds for temporary artifacts.
+
+    Returns:
+        None
+    """
+    global _last_cleanup_ts
     now = time.time()
+    with _cleanup_lock:
+        if now - _last_cleanup_ts < min_interval:
+            return
+        _last_cleanup_ts = now
     for folder in (UPLOAD_FOLDER, OUTPUT_FOLDER):
         try:
             for file_path in folder.iterdir():
-                if file_path.is_file() and file_path.name != ".gitkeep":
-                    if now - file_path.stat().st_mtime > max_age_seconds:
-                        file_path.unlink(missing_ok=True)
-        except Exception as e:
-            logger.warning(f"Cleanup warning in {folder}: {e}")
+                if (
+                    file_path.is_file()
+                    and file_path.name != ".gitkeep"
+                    and now - file_path.stat().st_mtime > max_age_seconds
+                ):
+                    file_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Cleanup warning in %s: %s", folder, exc)
 
     with video_jobs_lock:
         expired_jobs = [
@@ -98,7 +200,25 @@ def cleanup_old_files(max_age_seconds: int = 3600):
         for jid in expired_jobs:
             video_jobs.pop(jid, None)
 
+def _parse_confidence(raw_val: Any, default: float = 0.5) -> float:
+    """
+    Safely parse and clamp confidence threshold into [0.05, 0.99].
 
+    Args:
+        raw_val: Raw input value from form or JSON.
+        default: Fallback confidence value if parsing fails.
+
+    Returns:
+        Clamped float confidence threshold.
+    """
+    try:
+        val = float(raw_val)
+        if not math.isfinite(val):
+            return default
+        return max(0.05, min(0.99, val))
+    except (TypeError, ValueError):
+        return default
+        
 def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> YOLOv12FaceDetector:
     """
     Get or initialize a YOLOv12FaceDetector instance with LRU memory eviction.
@@ -110,7 +230,6 @@ def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> Y
         if model_key in detectors:
             detectors.move_to_end(model_key)
             detector = detectors[model_key]
-            detector.conf_threshold = conf_threshold
             return detector
 
         while len(detectors) >= MAX_LOADED_MODELS:
@@ -160,16 +279,17 @@ def get_models():
 
 
 @app.route("/api/detect-image", methods=["POST"])
-def detect_image():
-    """Detect faces in uploaded image."""
+def detect_image() -> tuple[Response, int] | Response:
+    """
+    Detect faces in an uploaded image and return coordinates or Base64 results.
+
+    Returns:
+        Flask JSON Response containing face detections.
+    """
     try:
-        if "image" not in request.files:
-            return jsonify({"error": "No image provided"}), 400
-
-        file = request.files["image"]
-        if file.filename == "":
-            return jsonify({"error": "Empty filename"}), 400
-
+        file = request.files.get("image")
+        if file is None or not file.filename:
+            return jsonify({"error": "No image provided or empty filename"}), 400
         if not allowed_file(file.filename, ALLOWED_IMAGE_EXTENSIONS):
             return jsonify({"error": "Invalid image format"}), 400
 
@@ -178,9 +298,7 @@ def detect_image():
         model_key = request.form.get("model", "yolov12n")
         return_mode = request.form.get("return_mode", "base64")
 
-        file_bytes = np.frombuffer(file.read(), np.uint8)
-        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-
+        image = _decode_image_storage(file)
         if image is None:
             return jsonify({"error": "Failed to read image"}), 400
 
@@ -195,65 +313,38 @@ def detect_image():
                     "num_faces": len(detections),
                     "img_w": img_w,
                     "img_h": img_h,
-                    "detections": [
-                        {
-                            "id": i + 1,
-                            "x1": int(d["x1"]),
-                            "y1": int(d["y1"]),
-                            "x2": int(d["x2"]),
-                            "y2": int(d["y2"]),
-                            "w": int(d["w"]),
-                            "h": int(d["h"]),
-                            "confidence": round(float(d["confidence"]), 4),
-                        }
-                        for i, d in enumerate(detections)
-                    ],
+                    "detections": _format_detections(
+                        detections, scale_percent=False, include_xy2=True
+                    ),
                 }
             )
 
         output_image = detector.draw_faces(image, detections, blur_faces=blur_faces)
         face_crops = detector.get_face_crops(image, detections)
 
-        _, buffer = cv2.imencode(".jpg", output_image, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-        img_base64 = base64.b64encode(buffer).decode("utf-8")
-
-        faces_data = []
-        for i, crop_data in enumerate(face_crops):
-            _, crop_buffer = cv2.imencode(
-                ".jpg", crop_data["image"], [int(cv2.IMWRITE_JPEG_QUALITY), 85]
-            )
-            crop_base64 = base64.b64encode(crop_buffer).decode("utf-8")
-            faces_data.append(
-                {
-                    "id": i + 1,
-                    "image": f"data:image/jpeg;base64,{crop_base64}",
-                    "confidence": round(crop_data["confidence"] * 100, 2),
-                    "bbox": crop_data["bbox"],
-                }
-            )
+        faces_data = [
+            {
+                "id": i,
+                "image": f"data:image/jpeg;base64,{_encode_jpeg_b64(crop['image'])}",
+                "confidence": round(crop["confidence"] * 100, 2),
+                "bbox": crop["bbox"],
+            }
+            for i, crop in enumerate(face_crops, start=1)
+        ]
 
         return jsonify(
             {
                 "success": True,
                 "num_faces": len(detections),
-                "output_image": f"data:image/jpeg;base64,{img_base64}",
+                "output_image": f"data:image/jpeg;base64,{_encode_jpeg_b64(output_image)}",
                 "faces": faces_data,
-                "detections": [
-                    {
-                        "id": i + 1,
-                        "x1": int(d["x1"]),
-                        "y1": int(d["y1"]),
-                        "w": int(d["w"]),
-                        "h": int(d["h"]),
-                        "confidence": round(float(d["confidence"]) * 100, 2),
-                    }
-                    for i, d in enumerate(detections)
-                ],
+                "detections": _format_detections(
+                    detections, scale_percent=True, include_xy2=False
+                ),
             }
         )
-
-    except Exception as e:
-        logger.error(f"Error in detect_image: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error("Error in detect_image: %s", exc, exc_info=True)
         return jsonify({"error": "Internal server error during image detection"}), 500
 
 
@@ -293,6 +384,7 @@ def _process_video_job(
             show_preview=False,
             blur_faces=blur_faces,
             progress_callback=update_progress,
+            conf_threshold=conf_threshold
         )
 
         with video_jobs_lock:
@@ -367,20 +459,16 @@ def detect_video():
                 "created_at": time.time(),
             }
 
-        worker = threading.Thread(
-            target=_process_video_job,
-            args=(
-                job_id,
-                input_path,
-                output_path,
-                output_filename,
-                conf_threshold,
-                blur_faces,
-                model_key,
-            ),
-            daemon=True,
+        video_executor.submit(
+            _process_video_job,
+            job_id,
+            input_path,
+            output_path,
+            output_filename,
+            conf_threshold,
+            blur_faces,
+            model_key,
         )
-        worker.start()
 
         return jsonify({"success": True, "job_id": job_id, "status": "processing"})
 
@@ -508,6 +596,12 @@ def serve_output(filename: str):
     as_attachment = request.args.get("download", "false").lower() == "true"
     return send_from_directory(app.config["OUTPUT_FOLDER"], filename, as_attachment=as_attachment)
 
+@app.route("/api/feedback", methods=["POST"])
+def submit_feedback() -> tuple[Response, int] | Response:
+    """Receive user rating and feedback from Web UI."""
+    data = request.get_json(silent=True) or {}
+    logger.info("User feedback received: %s", data)
+    return jsonify({"success": True})
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
