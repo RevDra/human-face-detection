@@ -1,8 +1,9 @@
-# 📋 YOLOv12 Face Detection - Project Overview & Guide
+# 📋 YOLOv12 Face Detection - Project Overview & Guide (v2.0.0)
 
 ## 🎯 Quick Reference
 
 ### 🚀 Start Here
+
 1. Read: **DEPLOYMENT_GUIDE.md** (5 min)
 2. Run (Linux/Mac): `bash deploy.sh start`
 3. Run (Windows): `deploy.bat start`
@@ -13,83 +14,95 @@
 ## 📁 Complete File List
 
 ### Core Application Files (Required)
-- `src/web_app.py`: Main Flask server (Port 7860), optimized for Hugging Face.
-- `src/face_detection_yolov12.py`: YOLOv12 logic core.
-- `web/templates/index.html`: Responsive UI with Webcam/Video support.
+
+* `src/web_app.py`: Main FastAPI server (Port 7860), optimized for async ASGI and real-time SSE.
+* `src/face_detector.py`: Optimized YOLOv12 logic core (OpenCV + ONNX Runtime + NumPy vectorized interpolation).
+* `web/templates/index.html`: Responsive UI with adaptive webcam pacing and in-place smoothing.
 
 ### Deployment Files
-- `config/Dockerfile`: Docker configuration (Python 3.10-slim).
-- `config/docker-compose.yml`: Container orchestration.
-- `config/deploy.sh`: Automation script for Linux/Mac.
-- `config/deploy.bat`: Automation script for Windows.
-- `.github/workflows/docker-publish.yml`: CI/CD for auto-building Docker images.
 
-### Models (YOLOv12)
-- `models/yolov12n-face.pt`: Nano (Best for Webcam/CPU).
-- `models/yolov12s-face.pt`: Small (Balanced).
-- `models/yolov12m-face.pt`: Medium (Best for Video).
-- `models/yolov12l-face.pt`: Large (Best for Static Images).
-  
+* `config/Dockerfile`: Docker configuration (Python 3.11-slim + Uvicorn ASGI).
+* `config/docker-compose.yml`: Container orchestration.
+* `config/deploy.sh`: Automation script for Linux/Mac.
+* `config/deploy.bat`: Automation script for Windows.
+* `.github/workflows/docker-publish.yml`: CI/CD for auto-building Docker images.
+* `.github/workflows/release.yml`: Automated Semantic Release CI/CD.
+
+### Models (YOLOv12 INT8 ONNX)
+
+* `models/yolov12n-face.onnx`: Nano (Best for Webcam/CPU).
+* `models/yolov12s-face.onnx`: Small (Balanced).
+* `models/yolov12m-face.onnx`: Medium (Best for Video).
+* `models/yolov12l-face.onnx`: Large (Best for Static Images).
+
 ### Documentation Files
 
-✅ DEPLOYMENT_GUIDE.txt (THIS FILE)
-   - Overview of all files created
-   - Quick reference guide
-   - File descriptions
-   - Recommended reading order
+✅ DEPLOYMENT_GUIDE.md (THIS FILE)
+
+* Overview of all files created
+* Quick reference guide
+* File descriptions
+* Recommended reading order
 
 ### Configuration Files
+
 ```
 - requirements.txt
-   + CPU-optimized PyTorch (--extra-index-url)
-   + ultralytics (Latest for v12 support)
+   + fastapi
+   + uvicorn[standard]
+   + pydantic
+   + python-multipart
+   + onnxruntime
    + opencv-python-headless
-   + Flask>=2.3.0
-   + Werkzeug>=2.3.0
    + All other dependencies intact
+
 ```
 
 ### Directory Structure
+
 ```
 Human_face_detection/
-├── 🤖 CI/CD & AUTOMATION (New)
+├── 🤖 CI/CD & AUTOMATION
 │   └── .github/
-│       ├── workflows/
-│       │   └── docker-publish.yml      ⭐ GitHub Action to Auto-build Docker Image
-│       └── dependabot.yml              ⭐ Automated Dependency Updates
+│       └── workflows/
+│           ├── docker-publish.yml        ⭐ GitHub Action to Auto-build Docker Image
+│           ├── release.yml               ⭐ Automated Semantic Release CI/CD
+│           └── lint.yml                  ⭐ Code Quality Check
 │
 ├── ⚙️ DEPLOYMENT & CONFIG
 │   └── config/
-│       ├── Dockerfile              ⭐ Docker image config
-│       ├── docker-compose.yml      ⭐ Docker Compose setup
-│       ├── deploy.sh               Linux/macOS deployment script
-│       └── deploy.bat              Windows deployment script
+│       ├── Dockerfile                    ⭐ Docker image config
+│       ├── docker-compose.yml            ⭐ Docker Compose setup
+│       ├── deploy.sh                     Linux/macOS deployment script
+│       └── deploy.bat                    Windows deployment script
 │
 ├── 🌐 SOURCE CODE
-│   ├── src/
-│   │   ├── web_app.py              ⭐ Main Flask server (Port 7860)
-│   │   └── face_detection_yolov12.py  ⭐ YOLOv12 Detection Engine
-│   │
-│   └── web/templates/
-│       └── index.html              ⭐ Web UI
+│   └── src/
+│       ├── web_app.py                    ⭐ Main FastAPI server (Port 7860)
+│       └── face_detector.py              ⭐ YOLOv12 Detection Engine (ONNX + OpenCV)
 │
-├── 🧠 MODELS (YOLOv12)
+├── 🎨 FRONTEND
+│   └── web/templates/
+│       └── index.html                    ⭐ Web UI (Adaptive Webcam Pacing)
+│
+├── 🧠 MODELS (YOLOv12 INT8 ONNX)
 │   └── models/
-│       ├── yolov12n-face.pt        Nano model (Best for Webcam)
-│       ├── yolov12s-face.pt        Small model
-│       ├── yolov12m-face.pt        Medium model
-│       └── yolov12l-face.pt        Large model
+│       ├── yolov12n-face.onnx       Nano model (Best for Webcam)
+│       ├── yolov12s-face.onnx       Small model
+│       ├── yolov12m-face.onnx       Medium model
+│       └── yolov12l-face.onnx       Large model
 │
 ├── 📚 DOCUMENTATION & META
-│   ├── README.md                   Main documentation
-│   ├── LICENSE                     AGPL v3 License
-│   ├── CODE_OF_CONDUCT.md          Community Guidelines
-│   ├── requirements.txt            Python dependencies
-│   └── DEPLOYMENT_GUIDE.md        This file
+│   ├── README.md                         Main documentation
+│   ├── LICENSE                           AGPL v3 License
+│   ├── SECURITY.md                       Security policy
+│   ├── requirements.txt                  Python dependencies
+│   └── DEPLOYMENT_GUIDE.md               This file
 │
 └── 📁 RUNTIME STORAGE (Auto-created)
-    └── data/
-        └── uploads/                Temporary file storage
+    ├── uploads/                          Temporary file storage
+    └── outputs/                          Processed video outputs
+
 ```
 
 ---
@@ -97,288 +110,121 @@ Human_face_detection/
 ## 🎯 What Each File Does
 
 ### src/web_app.py (Main Application)
+
 ```python
 # Key features:
-- Flask web server
-- REST API endpoints
+- FastAPI ASGI web server
+- REST API endpoints & SSE Real-time Streaming
   - POST /api/detect-image
   - POST /api/detect-video
+  - GET /api/video-stream/{job_id}
   - GET /api/models
   - GET /api/health
-- Model caching
-- File upload handling
-- Error handling
-- Size: ~300 lines
--Depends on: face_detection_yolov12.py, Flask, Werkzeug
+- ThreadPoolExecutor & BackgroundTasks
+- O(1) memory chunked file uploads
+- Robust path traversal safety guards
+- Size: ~400 lines
+- Depends on: face_detector.py, FastAPI, Uvicorn
+
 ```
 
-### templates/index.html (Web Interface)
+### web/templates/index.html (Web Interface)
+
 ```html
 <!-- Features: -->
 - Beautiful gradient background
-- 4 main tabs (Image, Video, Webcam, Info)
+- Responsive design & Mobile-friendly
+- Adaptive webcam pacing & in-place smoothing
+- Real-time SSE progress indicators for video processing
 - Drag-and-drop file upload
-- Real-time progress indicators
-- Responsive design
-- Mobile-friendly
 - JavaScript API integration
 - Size: ~800 lines
-- Dependencies: Bootstrap CSS, JavaScript ES6
+
 ```
 
 ### docker-compose.yml
+
 ```yaml
 # Includes:
 - Service definition
-- Port mapping
+- Port mapping (7860:7860)
 - Volume mounting
 - Health checks
 - Restart policy
-- Size: ~25 lines
+
 ```
 
-### deploy.sh (Linux Deployment)
+### deploy.sh & deploy.bat (Deployment Automation)
+
 ```bash
 # Features:
-- Install dependencies
-- Setup virtual environment
-- Configure Nginx
-- Setup Supervisor
-- Gunicorn integration
-- Full production setup
-- Size: ~300 lines
-- Requires: root/sudo
-```
-
-### deploy.bat (Windows Deployment)
-```batch
-# Features:
 - Virtual environment setup
-- Python dependency installation
-- Gunicorn setup
-- Port management
-- Auto-launch browser
-- Simple menu system
-- Size: ~250 lines
-- Requires: Administrator (optional)
+- Dependency installation
+- Uvicorn ASGI server integration
+- Port management & auto-launch
+
 ```
-
----
-
-## 🔍 File Status
-
-### ✅ Production Ready
-- src/web_app.py
-- templates/index.html
-- config/Dockerfile
-- config/docker-compose.yml
-- requirements.txt
-- All documentation
-
-### ✅ Tested Locally
-- File uploads (image, video)
-- API endpoints
-- Web interface
-- All 4 models
-
-### ✅ Well Documented
-- Every function has docstrings
-- Error handling is clear
-- Configuration is obvious
-- Deployment is explained
-
----
-
-## 💾 Storage Requirements
-
-| Component | Size | Purpose |
-|-----------|------|---------|
-| web_app.py | ~12 KB | Flask server |
-| index.html | ~50 KB | Web UI |
-| Docker files | ~2 KB | Container setup |
-| Deploy scripts | ~12 KB | Automation |
-| Documentation | ~200 KB | Guides |
-| **Total code** | **~75 KB** | - |
-| yolov8n_100e.pt | ~25 MB | Nano model |
-| yolov8m_200e.pt | ~45 MB | Medium model |
-| yolov8l_100e.pt | ~90 MB | Large model |
-| **Total models** | **~160 MB** | - |
-
----
-
-## 🎯 What's New in YOLOv12?
-
-This project uses the latest **YOLOv12** architecture, which introduces:
-* **Attention Mechanism:** Better focus on small faces and occluded features.
-* **FlashAttention:** Faster inference speed comparable to v8/v10.
-* **Zero-shot Generalization:** Improved performance in varying lighting conditions.
 
 ---
 
 ## 🚀 Deployment Options
 
 ### Option 1: Local Development (Easiest)
+
 ```bash
-python web_app.py
+uvicorn src.web_app:app --host 0.0.0.0 --port 7860 --reload
 # Visit http://localhost:7860
+
 ```
+
 **Time:** 2 minutes
 **Cost:** Free
 **Best for:** Testing, development
 
 ### Option 2: Docker Local
+
 ```bash
-docker-compose up -d
+docker-compose -f config/docker-compose.yml up --build
+
 ```
+
 **Time:** 5 minutes
 **Cost:** Free
 **Best for:** Consistent environment
 
-### Option 3: Windows/Linux Server (Production)
-```bash
-# Windows
-deploy.bat deploy
+### Option 3: Hugging Face Spaces (Recommended)
 
-# Linux
-sudo bash deploy.sh deploy
-```
-**Time:** 10-15 minutes
-**Cost:** Server cost only
-**Best for:** Full control
-
-### Option 4: Cloud (Easiest Production)
-**Heroku:** 2 minutes, automatic
-**AWS:** 5 minutes, scalable
-**Azure:** 5 minutes, scalable
-**GCP:** 5 minutes, scalable
-
-**Time:** 5-10 minutes
-**Cost:** $5-50/month
-**Best for:** Reliability, scaling
-
-### Option 5: Hugging Face Spaces (Recommended)
 1. Create new Space (Docker SDK).
 2. Upload all files.
-3. Ensure `Dockerfile` is at root (or configured correctly).
+3. Ensure `Dockerfile` is configured at root or path.
 4. App runs automatically on port **7860**.
 
 ---
+
 ## 🔧 API Endpoints
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/detect-image | Upload image & get detection result (Base64) |
-| POST | /api/detect-video | Upload video & process frames |
+| --- | --- | --- |
+| POST | /api/detect-image | Upload image & get detection result (Base64/JSON) |
+| POST | /api/detect-video | Upload video in O(1) chunks & start async job |
+| GET | /api/video-stream/{job_id} | Real-time Server-Sent Events (SSE) progress stream |
 | GET | /api/models | Get list of available YOLOv12 models |
 | GET | /api/health | Server status check |
-| GET | /api/download/<file> | Download processed video/image |
----
-
-## ✨ Features Summary
-
-### Web Interface
-✅ Beautiful responsive design
-✅ Image detection with preview
-✅ Video detection with download
-✅ Model selection
-✅ Progress indicators
-✅ Detailed statistics
-✅ Error messages
-✅ Mobile-friendly
-
-### API
-✅ REST endpoints
-✅ JSON responses
-✅ Error handling
-✅ Health checks
-✅ Model listing
-✅ Base64 image encoding
-✅ File streaming
-
-### Deployment
-✅ Docker support
-✅ Docker Compose
-✅ Gunicorn integration
-✅ Nginx reverse proxy
-✅ Supervisor process management
-✅ SSL/HTTPS ready
-✅ Auto-restart
-✅ Health monitoring
-
-### Security
-✅ File type validation
-✅ File size limits
-✅ Secure filename handling
-✅ Error suppression
-✅ CORS ready
-✅ Input validation
-✅ SQL injection safe
+| GET | /outputs/{filename} | Download or stream processed video files (Range Requests supported) |
 
 ---
 
-## 📊 Performance
+## 📊 Performance & Architecture Improvements (v2.0.0)
 
-### Expected Speed
-| Operation | Time |
-|-----------|------|
-| Web load | < 1s |
-| Image upload | 1-2s |
-| Image detection | 3-8s |
-| Video upload | 2-10s |
-| Video processing | 1-5 min |
-
-### Resource Usage
-| Resource | Usage |
-|----------|-------|
-| Memory | 300-500 MB |
-| CPU | 50-100% (during detection) |
-| Disk | Uploads only |
-| Network | Variable |
----
-
-## ✅ Pre-Launch Checklist
-
-Before going live, ensure:
-- [ ] All 4 models present
-- [ ] Web interface tested
-- [ ] Image detection works
-- [ ] Video detection works
-- [ ] API endpoints work
-- [ ] File uploads work
-- [ ] File downloads work
-- [ ] Documentation reviewed
-- [ ] Security hardened
-- [ ] Monitoring configured
-
----
-
-## 🆘 Getting Help
-
-### Quick Issues
-1. Port already in use? Kill process or change port
-2. Models not found? Check file names and location
-3. Import error? Install requirements: `pip install flask`
-4. Slow detection? Use nano model or reduce file size
-
-### Detailed Help
-1. Check console output for errors
-2. Read README.md FAQ section
-4. Check DEPLOYMENT_GUIDE.md troubleshooting
-
----
-
-## 📞 Support Resources
-
-| Resource | Link |
-|----------|------|
-| Flask Docs | https://flask.palletsprojects.com/ |
-| Gunicorn Docs | https://gunicorn.org/ |
-| YOLOv12 Docs | https://docs.ultralytics.com/ |
-| Docker Docs | https://docs.docker.com/ |
+* **Asynchronous ASGI Performance:** Migrated from synchronous WSGI Flask to non-blocking FastAPI and Uvicorn.
+* **Vectorized Interpolation:** Optimized `face_detector.py` using NumPy vectorization and motion-gated logic.
+* **O(1) Memory Footprint:** Chunked file uploads (1MB blocks) prevent server memory overload on large videos.
+* **Adaptive Frontend Pacing:** Replaced rigid intervals with dynamic timeout scheduling and smooth object mutation.
 
 ---
 
 **Created:** January 31, 2026
-**Version:** 2.0 (YOLOv12 Upgrade)
-**Status:** Production Ready ✅
 
+**Updated:** June 2026 (v2.0.0 FastAPI Architecture Release)
+
+**Status:** Production Ready ✅
