@@ -712,29 +712,30 @@ async def detect_webcam_frame(request: Request) -> JSONResponse:
 @app.get("/outputs/{filename:path}")
 async def serve_output(filename: str, download: str = "false") -> Response:
     """Serve processed video files with HTTP Range support and optional download attachment."""
-    # 1. Chặn tuyệt đối các ký tự điều hướng thư mục nguy hiểm hoặc tên file không hợp lệ
-    safe_name = Path(filename).name
-    if not safe_name or safe_name in (".", "..") or "/" in filename or "\\" in filename:
+
+    base_name = Path(filename).name
+    if not base_name or base_name in (".", ".."):
         return JSONResponse({"error": "Invalid file path"}, status_code=400)
 
-    safe_root = OUTPUT_FOLDER.resolve()
-    target_path = (OUTPUT_FOLDER / safe_name).resolve()
+    target_path = OUTPUT_FOLDER / base_name
 
     try:
-        target_path.relative_to(safe_root)
-    except ValueError:
-        if not target_path.is_file():
+        resolved_root = OUTPUT_FOLDER.resolve()
+        resolved_target = target_path.resolve()
+
+        if not resolved_target.is_relative_to(resolved_root) or not resolved_target.is_file():
             return JSONResponse({"error": "File not found"}, status_code=404)
+    except (ValueError, RuntimeError):
+        return JSONResponse({"error": "File not found"}, status_code=404)
 
     as_attachment = download.lower() in ("true", "1", "yes")
     disposition = "attachment" if as_attachment else "inline"
     return FileResponse(
-        path=str(target_path),
+        path=str(resolved_target),
         media_type="video/mp4",
-        filename=target_path.name if as_attachment else None,
+        filename=resolved_target.name if as_attachment else None,
         content_disposition_type=disposition,
     )
-
 
 @app.post("/api/feedback")
 async def submit_feedback(request: Request) -> JSONResponse:
