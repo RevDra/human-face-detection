@@ -723,6 +723,11 @@ async def serve_output(filename: str, download: str = "false") -> Response:
     try:
         target_path.relative_to(safe_root)
     except ValueError:
+        target_path.relative_to(safe_root)
+    except ValueError:
+    if not target_path.is_file():
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
         return JSONResponse({"error": "File not found"}, status_code=404)
 
     if not target_path.is_file():
