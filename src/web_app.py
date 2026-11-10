@@ -22,7 +22,6 @@ from typing import Any, AsyncIterator
 import cv2
 import numpy as np
 import uvicorn
-from .face_detector import YOLOv12FaceDetector
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -30,6 +29,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from werkzeug.utils import secure_filename
+
+from .face_detector import YOLOv12FaceDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,10 +51,10 @@ ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "webp"}
 ALLOWED_VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "webm"}
 
 MAX_VIDEO_SIZE_BYTES = 1024 * 1024 * 1024  # 1 GB
-MAX_IMAGE_SIZE_BYTES = 25 * 1024 * 1024    # 25 MB
-MAX_WEBCAM_SIZE_BYTES = 5 * 1024 * 1024    # 5 MB
+MAX_IMAGE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
+MAX_WEBCAM_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 MAX_IMAGE_PIXELS = 8192 * 8192
-UPLOAD_CHUNK_SIZE = 1024 * 1024            # 1 MB chunked write (O(1) RAM)
+UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MB chunked write (O(1) RAM)
 
 MAX_VIDEO_WORKERS = int(os.environ.get("MAX_VIDEO_WORKERS", 2))
 MAX_INFERENCE_WORKERS = int(
@@ -122,9 +123,7 @@ def _encode_jpeg_b64(image: np.ndarray, quality: int = 85) -> str:
     return base64.b64encode(buffer).decode("utf-8")
 
 
-def _decode_image_bytes(
-    data: bytes, max_bytes: int = MAX_IMAGE_SIZE_BYTES
-) -> np.ndarray | None:
+def _decode_image_bytes(data: bytes, max_bytes: int = MAX_IMAGE_SIZE_BYTES) -> np.ndarray | None:
     """
     Safely decode raw image bytes into a BGR image with size and pixel-count protection.
 
@@ -266,9 +265,7 @@ def _parse_bool(raw_val: Any) -> bool:
     return str(raw_val).strip().lower() in ("true", "1", "yes", "on")
 
 
-def get_detector(
-    conf_threshold: float = 0.32, model_key: str = "yolov12n"
-) -> YOLOv12FaceDetector:
+def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> YOLOv12FaceDetector:
     """
     Get or initialize a YOLOv12FaceDetector instance with LRU memory eviction.
 
@@ -294,9 +291,7 @@ def get_detector(
 
         model_path = AVAILABLE_MODELS[model_key]
         logger.info("Loading model '%s' from %s...", model_key, model_path)
-        detector = YOLOv12FaceDetector(
-            model_path=model_path, conf_threshold=conf_threshold
-        )
+        detector = YOLOv12FaceDetector(model_path=model_path, conf_threshold=conf_threshold)
         detectors[model_key] = detector
         return detector
 
@@ -358,9 +353,7 @@ def _run_image_detection_sync(
                 "num_faces": len(detections),
                 "img_w": img_w,
                 "img_h": img_h,
-                "detections": _format_detections(
-                    detections, scale_percent=False, include_xy2=True
-                ),
+                "detections": _format_detections(detections, scale_percent=False, include_xy2=True),
             },
             200,
         )
@@ -384,9 +377,7 @@ def _run_image_detection_sync(
             "num_faces": len(detections),
             "output_image": f"data:image/jpeg;base64,{_encode_jpeg_b64(output_image)}",
             "faces": faces_data,
-            "detections": _format_detections(
-                detections, scale_percent=True, include_xy2=False
-            ),
+            "detections": _format_detections(detections, scale_percent=True, include_xy2=False),
         },
         200,
     )
@@ -403,9 +394,7 @@ async def detect_image(
     """Detect faces in an uploaded image and return coordinates or Base64 results."""
     try:
         if image is None or not image.filename:
-            return JSONResponse(
-                {"error": "No image provided or empty filename"}, status_code=400
-            )
+            return JSONResponse({"error": "No image provided or empty filename"}, status_code=400)
         if not allowed_file(image.filename, ALLOWED_IMAGE_EXTENSIONS):
             return JSONResponse({"error": "Invalid image format"}, status_code=400)
 
@@ -545,9 +534,7 @@ async def detect_video(
                 if written_bytes > MAX_VIDEO_SIZE_BYTES:
                     out_file.close()
                     input_path_obj.unlink(missing_ok=True)
-                    return JSONResponse(
-                        {"error": "Video file exceeds 1GB limit"}, status_code=400
-                    )
+                    return JSONResponse({"error": "Video file exceeds 1GB limit"}, status_code=400)
                 out_file.write(chunk)
 
         with video_jobs_lock:
@@ -573,16 +560,12 @@ async def detect_video(
             model,
         )
 
-        return JSONResponse(
-            {"success": True, "job_id": job_id, "status": "processing"}
-        )
+        return JSONResponse({"success": True, "job_id": job_id, "status": "processing"})
     except Exception as exc:
         if input_path_obj is not None:
             input_path_obj.unlink(missing_ok=True)
         logger.error("Error in detect_video: %s", exc, exc_info=True)
-        return JSONResponse(
-            {"error": "Internal server error during video upload"}, status_code=500
-        )
+        return JSONResponse({"error": "Internal server error during video upload"}, status_code=500)
 
 
 @app.get("/api/video-status/{job_id}")
