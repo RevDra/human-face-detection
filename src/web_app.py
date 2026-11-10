@@ -737,6 +737,7 @@ async def serve_output(filename: str, download: str = "false") -> Response:
         content_disposition_type=disposition,
     )
 
+
 @app.post("/api/feedback")
 async def submit_feedback(request: Request) -> JSONResponse:
     """Receive user rating and feedback from Web UI."""
