@@ -720,7 +720,12 @@ async def serve_output(filename: str, download: str = "false") -> Response:
     safe_root = OUTPUT_FOLDER.resolve()
     target_path = (OUTPUT_FOLDER / safe_name).resolve()
 
-    if not str(target_path).startswith(str(safe_root)) or not target_path.is_file():
+    try:
+        target_path.relative_to(safe_root)
+    except ValueError:
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    if not target_path.is_file():
         return JSONResponse({"error": "File not found"}, status_code=404)
 
     as_attachment = download.lower() in ("true", "1", "yes")
