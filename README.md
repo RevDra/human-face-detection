@@ -215,13 +215,19 @@ Open `http://localhost:7860` in your browser.
 * [Ultralytics YOLOv12](https://docs.ultralytics.com/) - YOLOv12 documentation.
 * [FastAPI Documentation](https://fastapi.tiangolo.com/)
 * [OpenCV Documentation](https://docs.opencv.org/)
+* [YOLOv12-Face Repository](https://github.com/YapaLab/yolo-face) - Source of the models/weights.
 
 ## 🙏 Acknowledgements & Licenses
 
-Project licensed under the **AGPL-3.0** license.
+This entire project is licensed under the **AGPL-3.0** to comply with the licensing terms of the YOLO ecosystem.
 
 ## 💬 Support & Q&A
 
+[![Have a question?](https://img.shields.io/badge/Ask%20a%20Question-GitHub%20Discussions-blue?style=for-the-badge&logo=github)](https://github.com/RevDra/human-face-detection/discussions)
+
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/luongminhngoc)
 ---
 
-**Last Updated:** June 2026 | **Status:** ✅ Production Ready (v2.0.0)
+**Last Updated:** November 11, 2026 
+**Status:** ✅ Production Ready (v2.0.0)
