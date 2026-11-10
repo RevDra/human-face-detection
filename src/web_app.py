@@ -7,19 +7,18 @@ import base64
 import gc
 import json
 import logging
+import math
 import os
 import threading
 import time
 import uuid
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterator
-from werkzeug.datastructures import FileStorage
 
 import cv2
-import math
 import numpy as np
-from face_detector import YOLOv12FaceDetector
 from flask import (
     Flask,
     Response,
@@ -29,8 +28,10 @@ from flask import (
     send_from_directory,
     stream_with_context,
 )
+from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
-from concurrent.futures import ThreadPoolExecutor
+
+from face_detector import YOLOv12FaceDetector
 
 MAX_VIDEO_WORKERS = int(os.environ.get("MAX_VIDEO_WORKERS", 2))
 video_executor = ThreadPoolExecutor(max_workers=MAX_VIDEO_WORKERS)
@@ -80,6 +81,7 @@ detectors_lock = threading.Lock()
 video_jobs: dict[str, dict[str, Any]] = {}
 video_jobs_lock = threading.Lock()
 
+
 def _encode_jpeg_b64(image: np.ndarray, quality: int = 85) -> str:
     """
     Encode a BGR NumPy image into a Base64 JPEG string.
@@ -112,6 +114,7 @@ def _decode_image_storage(
     if h * w > MAX_IMAGE_PIXELS:
         return None
     return image
+
 
 def _format_detections(
     detections: list[dict[str, Any]],
@@ -149,7 +152,8 @@ def _format_detections(
             item["y2"] = det["y2"]
         formatted.append(item)
     return formatted
-    
+
+
 def allowed_file(filename: str, allowed_extensions: set[str]) -> bool:
     """
     Check if a filename has an allowed extension.
@@ -162,6 +166,7 @@ def allowed_file(filename: str, allowed_extensions: set[str]) -> bool:
         True if the file extension is valid, False otherwise.
     """
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
+
 
 def cleanup_old_files(max_age_seconds: int = 3600, min_interval: int = 300) -> None:
     """
@@ -200,6 +205,7 @@ def cleanup_old_files(max_age_seconds: int = 3600, min_interval: int = 300) -> N
         for jid in expired_jobs:
             video_jobs.pop(jid, None)
 
+
 def _parse_confidence(raw_val: Any, default: float = 0.5) -> float:
     """
     Safely parse and clamp confidence threshold into [0.05, 0.99].
@@ -218,7 +224,8 @@ def _parse_confidence(raw_val: Any, default: float = 0.5) -> float:
         return max(0.05, min(0.99, val))
     except (TypeError, ValueError):
         return default
-        
+
+
 def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> YOLOv12FaceDetector:
     """
     Get or initialize a YOLOv12FaceDetector instance with LRU memory eviction.
@@ -338,9 +345,7 @@ def detect_image() -> tuple[Response, int] | Response:
                 "num_faces": len(detections),
                 "output_image": f"data:image/jpeg;base64,{_encode_jpeg_b64(output_image)}",
                 "faces": faces_data,
-                "detections": _format_detections(
-                    detections, scale_percent=True, include_xy2=False
-                ),
+                "detections": _format_detections(detections, scale_percent=True, include_xy2=False),
             }
         )
     except Exception as exc:
@@ -384,7 +389,7 @@ def _process_video_job(
             show_preview=False,
             blur_faces=blur_faces,
             progress_callback=update_progress,
-            conf_threshold=conf_threshold
+            conf_threshold=conf_threshold,
         )
 
         with video_jobs_lock:
@@ -596,12 +601,14 @@ def serve_output(filename: str):
     as_attachment = request.args.get("download", "false").lower() == "true"
     return send_from_directory(app.config["OUTPUT_FOLDER"], filename, as_attachment=as_attachment)
 
+
 @app.route("/api/feedback", methods=["POST"])
 def submit_feedback() -> tuple[Response, int] | Response:
     """Receive user rating and feedback from Web UI."""
     data = request.get_json(silent=True) or {}
     logger.info("User feedback received: %s", data)
     return jsonify({"success": True})
+
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
