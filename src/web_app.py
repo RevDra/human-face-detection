@@ -716,7 +716,7 @@ async def serve_output(filename: str, download: str = "false") -> Response:
     clean_name = Path(filename).name
     if not clean_name or clean_name in (".", ".."):
         return JSONResponse({"error": "Invalid file path"}, status_code=400)
-        
+
     matched_path: Path | None = None
     try:
         resolved_root = OUTPUT_FOLDER.resolve()
