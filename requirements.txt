@@ -4,18 +4,19 @@ onnxruntime
 onnx
 openvino
 
-# Web Framework & Database
-Flask
-Werkzeug
-Flask-SQLAlchemy
-Flask-Limiter
-pymysql
-cryptography
+# Web Framework & ASGI Server
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
 python-dotenv
 PyTurboJPEG
-gunicorn
+Werkzeug
 
-# Utilities
+# Database & Utilities
+sqlalchemy
+pymysql
+cryptography
 Pillow
 Jinja2
 typing_extensions
