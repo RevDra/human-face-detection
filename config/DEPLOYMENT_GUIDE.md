@@ -1,65 +1,52 @@
-📋 YOLO26 Face Detection - Project Overview & Guide (v3.0.0)
+# 📋 YOLO26 Face Detection - Project Overview & Guide (v3.0.0)
 
-🎯 Quick Reference
+## 🎯 Quick Reference
 
-🚀 Start Here
+### 🚀 Start Here
 
-Read: DEPLOYMENT_GUIDE.md (5 min)
+1. Read: **DEPLOYMENT_GUIDE.md** (5 min)
+2. Run (Linux/Mac): `bash deploy.sh start`
+3. Run (Windows): `deploy.bat start`
+4. Visit: http://localhost:7860
 
-Run (Linux/Mac): bash deploy.sh start
+---
 
-Run (Windows): deploy.bat start
+## 📁 Complete File List
 
-Visit: http://localhost:7860
+### Core Application Files (Required)
 
-📁 Complete File List
+* `src/web_app.py`: Main FastAPI server (Port 7860), optimized for async ASGI and real-time SSE.
+* `src/face_detector.py`: Optimized YOLO26 logic core (OpenCV + ONNX Runtime + NumPy vectorized interpolation).
+* `web/templates/index.html`: Responsive UI with adaptive webcam pacing and in-place smoothing.
 
-Core Application Files (Required)
+### Deployment Files
 
-src/web_app.py: Main FastAPI server (Port 7860), optimized for async ASGI and real-time SSE.
+* `config/Dockerfile`: Docker configuration (Python 3.11-slim + Uvicorn ASGI).
+* `config/docker-compose.yml`: Container orchestration.
+* `config/deploy.sh`: Automation script for Linux/Mac.
+* `config/deploy.bat`: Automation script for Windows.
+* `.github/workflows/docker-publish.yml`: CI/CD for auto-building Docker images.
+* `.github/workflows/release.yml`: Automated Semantic Release CI/CD.
 
-src/face_detector.py: Optimized YOLO26 logic core (OpenCV + ONNX Runtime + NumPy vectorized interpolation).
+### Models (YOLO26 FP32 NMS-Free ONNX)
 
-web/templates/index.html: Responsive UI with adaptive webcam pacing and in-place smoothing.
+* `models/yolo26n-face.onnx`: Nano (Best for Webcam/CPU).
+* `models/yolo26s-face.onnx`: Small (Balanced).
+* `models/yolo26m-face.onnx`: Medium (Best for Video).
+* `models/yolo26l-face.onnx`: Large (Best for Static Images).
 
-Deployment Files
-
-config/Dockerfile: Docker configuration (Python 3.11-slim + Uvicorn ASGI).
-
-config/docker-compose.yml: Container orchestration.
-
-config/deploy.sh: Automation script for Linux/Mac.
-
-config/deploy.bat: Automation script for Windows.
-
-.github/workflows/docker-publish.yml: CI/CD for auto-building Docker images.
-
-.github/workflows/release.yml: Automated Semantic Release CI/CD.
-
-Models (YOLO26 FP32 NMS-Free ONNX)
-
-models/yolo26n-face.onnx: Nano (Best for Webcam/CPU).
-
-models/yolo26s-face.onnx: Small (Balanced).
-
-models/yolo26m-face.onnx: Medium (Best for Video).
-
-models/yolo26l-face.onnx: Large (Best for Static Images).
-
-Documentation Files
+### Documentation Files
 
 ✅ DEPLOYMENT_GUIDE.md (THIS FILE)
 
-Overview of all files created
+* Overview of all files created
+* Quick reference guide
+* File descriptions
+* Recommended reading order
 
-Quick reference guide
+### Configuration Files
 
-File descriptions
-
-Recommended reading order
-
-Configuration Files
-
+```
 - requirements.txt
    + fastapi
    + uvicorn[standard]
@@ -69,10 +56,11 @@ Configuration Files
    + opencv-python-headless
    + All other dependencies intact
 
+```
 
+### Directory Structure
 
-Directory Structure
-
+```
 Human_face_detection/
 ├── 🤖 CI/CD & AUTOMATION
 │   └── .github/
@@ -115,12 +103,15 @@ Human_face_detection/
     ├── uploads/                          Temporary file storage
     └── outputs/                          Processed video outputs
 
+```
 
+---
 
-🎯 What Each File Does
+## 🎯 What Each File Does
 
-src/web_app.py (Main Application)
+### src/web_app.py (Main Application)
 
+```python
 # Key features:
 - FastAPI ASGI web server
 - REST API endpoints & SSE Real-time Streaming
@@ -135,10 +126,11 @@ src/web_app.py (Main Application)
 - Size: ~400 lines
 - Depends on: face_detector.py, FastAPI, Uvicorn
 
+```
 
+### web/templates/index.html (Web Interface)
 
-web/templates/index.html (Web Interface)
-
+```html
 <!-- Features: -->
 - Beautiful gradient background
 - Responsive design & Mobile-friendly
@@ -148,10 +140,11 @@ web/templates/index.html (Web Interface)
 - JavaScript API integration
 - Size: ~800 lines
 
+```
 
+### docker-compose.yml
 
-docker-compose.yml
-
+```yaml
 # Includes:
 - Service definition
 - Port mapping (7860:7860)
@@ -159,107 +152,79 @@ docker-compose.yml
 - Health checks
 - Restart policy
 
+```
 
+### deploy.sh & deploy.bat (Deployment Automation)
 
-deploy.sh & deploy.bat (Deployment Automation)
-
+```bash
 # Features:
 - Virtual environment setup
 - Dependency installation
 - Uvicorn ASGI server integration
 - Port management & auto-launch
 
+```
 
+---
 
-🚀 Deployment Options
+## 🚀 Deployment Options
 
-Option 1: Local Development (Easiest)
+### Option 1: Local Development (Easiest)
 
+```bash
 uvicorn src.web_app:app --host 0.0.0.0 --port 7860 --reload
 # Visit http://localhost:7860
 
+```
 
+**Time:** 2 minutes
+**Cost:** Free
+**Best for:** Testing, development
 
-Time: 2 minutes
-Cost: Free
-Best for: Testing, development
+### Option 2: Docker Local
 
-Option 2: Docker Local
-
+```bash
 docker-compose -f config/docker-compose.yml up --build
 
+```
 
+**Time:** 5 minutes
+**Cost:** Free
+**Best for:** Consistent environment
 
-Time: 5 minutes
-Cost: Free
-Best for: Consistent environment
+### Option 3: Hugging Face Spaces (Recommended)
 
-Option 3: Hugging Face Spaces (Recommended)
+1. Create new Space (Docker SDK).
+2. Upload all files.
+3. Ensure `Dockerfile` is configured at root or path.
+4. App runs automatically on port **7860**.
 
-Create new Space (Docker SDK).
+---
 
-Upload all files.
+## 🔧 API Endpoints
 
-Ensure Dockerfile is configured at root or path.
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | /api/detect-image | Upload image & get detection result (Base64/JSON) |
+| POST | /api/detect-video | Upload video in O(1) chunks & start async job |
+| GET | /api/video-stream/{job_id} | Real-time Server-Sent Events (SSE) progress stream |
+| GET | /api/models | Get list of available YOLO26 models |
+| GET | /api/health | Server status check |
+| GET | /outputs/{filename} | Download or stream processed video files (Range Requests supported) |
 
-App runs automatically on port 7860.
+---
 
-🔧 API Endpoints
+## 📊 Performance & Architecture Improvements (v3.0.0)
 
-Method
+* **Asynchronous ASGI Performance:** Migrated from synchronous WSGI Flask to non-blocking FastAPI and Uvicorn.
+* **Vectorized Interpolation:** Optimized `face_detector.py` using NumPy vectorization and motion-gated logic.
+* **O(1) Memory Footprint:** Chunked file uploads (1MB blocks) prevent server memory overload on large videos.
+* **Adaptive Frontend Pacing:** Replaced rigid intervals with dynamic timeout scheduling and smooth object mutation.
 
-Endpoint
+---
 
-Description
+**Created:** January 31, 2026
 
-POST
+**Updated:** June 2026 (v3.0.0 FastAPI Architecture Release)
 
-/api/detect-image
-
-Upload image & get detection result (Base64/JSON)
-
-POST
-
-/api/detect-video
-
-Upload video in O(1) chunks & start async job
-
-GET
-
-/api/video-stream/{job_id}
-
-Real-time Server-Sent Events (SSE) progress stream
-
-GET
-
-/api/models
-
-Get list of available YOLO26 models
-
-GET
-
-/api/health
-
-Server status check
-
-GET
-
-/outputs/{filename}
-
-Download or stream processed video files (Range Requests supported)
-
-📊 Performance & Architecture Improvements (v3.0.0)
-
-Asynchronous ASGI Performance: Migrated from synchronous WSGI Flask to non-blocking FastAPI and Uvicorn.
-
-Vectorized Interpolation: Optimized face_detector.py using NumPy vectorization and motion-gated logic.
-
-O(1) Memory Footprint: Chunked file uploads (1MB blocks) prevent server memory overload on large videos.
-
-Adaptive Frontend Pacing: Replaced rigid intervals with dynamic timeout scheduling and smooth object mutation.
-
-Created: January 31, 2026
-
-Updated: June 2026 (v3.0.0 FastAPI Architecture Release)
-
-Status: Production Ready ✅
+**Status:** Production Ready ✅
