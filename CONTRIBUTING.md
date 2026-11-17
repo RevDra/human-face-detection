@@ -1,4 +1,4 @@
-# Contributing to YOLOv12 Face Detection
+# Contributing to YOLO26 Face Detection
 
 First off, thanks for taking the time to contribute! 🎉
 

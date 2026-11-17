@@ -1,4 +1,4 @@
-# YOLOv12 Face Detection - Docker Compose Configuration
+# YOLO26 Face Detection - Docker Compose Configuration
 
 version: '3.8'
 
@@ -7,7 +7,7 @@ services:
     build:
       context: .
       dockerfile: config/Dockerfile
-    container_name: yolov12-face-detection
+    container_name: yolo26-face-detection
     ports:
       - "7860:7860"
     volumes:

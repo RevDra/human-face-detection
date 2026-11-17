@@ -3,11 +3,11 @@ REM --- FIX PATH FOR FOLDER CONFIG ---
 cd /d "%~dp0.."
 echo [*] Working Directory set to: %CD%
 REM ----------------------------------
-REM YOLOv12 Face Detection - Windows Deployment Script (Matched with Hugging Face Config)
+REM YOLO26 Face Detection - Windows Deployment Script (Matched with Hugging Face Config)
 REM Usage: deploy.bat [start|stop|restart|status]
 
 setlocal enabledelayedexpansion
-set APP_NAME=face-detection-yolov12
+set APP_NAME=face-detection-yolo26
 set APP_PORT=7860
 set VENV_PATH=%CD%\venv
 set PYTHON=%VENV_PATH%\Scripts\python.exe
@@ -15,7 +15,7 @@ set PIP=%VENV_PATH%\Scripts\pip.exe
 
 echo.
 echo ===================================================
-echo YOLOv12 Face Detection - Local Server (Port %APP_PORT%)
+echo YOLO26 Face Detection - Local Server (Port %APP_PORT%)
 echo ===================================================
 echo.
 
@@ -128,7 +128,7 @@ REM Lưu ý: Chạy trực tiếp web_app.py thay vì gunicorn trên Windows
 echo [*] Starting Flask server on http://localhost:%APP_PORT%
 echo [*] Logs are shown in the new window...
 
-start "YOLOv12 Face Detection Server" cmd /k "cd /d %CD% && "%PYTHON%" src\web_app.py"
+start "YOLO26 Face Detection Server" cmd /k "cd /d %CD% && "%PYTHON%" src\web_app.py"
 
 REM Wait for app to start
 timeout /t 3 /nobreak
@@ -195,32 +195,32 @@ if not exist "%VENV_PATH%" (
     call :install_deps
 )
 
-REM Check model files (Updated for YOLOv12)
+REM Check model files (Updated for YOLO26)
 echo [*] Checking for required model files in models folder...
 set MISSING=0
 
 if not exist "models" mkdir models
 
-if not exist "models\yolov12n-face.pt" (
-    echo [-] Missing: models\yolov12n-face.pt
+if not exist "models\yolo26n-face.onnx" (
+    echo [-] Missing: models\yolo26n-face.onnx
     set MISSING=1
 )
-if not exist "models\yolov12s-face.pt" (
-    echo [-] Missing: models\yolov12s-face.pt
+if not exist "models\yolo26s-face.onnx" (
+    echo [-] Missing: models\yolo26s-face.onnx
     set MISSING=1
 )
-if not exist "models\yolov12m-face.pt" (
-    echo [-] Missing: models\yolov12m-face.pt
+if not exist "models\yolo26m-face.onnx" (
+    echo [-] Missing: models\yolo26m-face.onnx
     set MISSING=1
 )
-if not exist "models\yolov12l-face.pt" (
-    echo [-] Missing: models\yolov12l-face.pt
+if not exist "models\yolo26l-face.onnx" (
+    echo [-] Missing: models\yolo26l-face.onnx
     set MISSING=1
 )
 
 if %MISSING% equ 1 (
     echo.
-    echo [!] Some YOLOv12 model files are missing in 'models\' folder!
+    echo [!] Some YOLO26 model files are missing in 'models\' folder!
     echo [*] Please train/download them and place them in the 'models' folder.
     echo.
     pause

@@ -1,129 +1,70 @@
-# 📦 YOLOv12 Face Detection Models (INT8 Quantized)
+# 📦 YOLO26 Face Detection Models (FP32 NMS-Free ONNX)
 
-This folder contains the **YOLOv12** models optimized for Human Face Detection using **ONNX Runtime**, along with the training source code and benchmark results from the WIDER FACE dataset[cite: 1].
+This folder contains the **YOLO26** models optimized for Human Face Detection using **ONNX Runtime**, fine-tuned on the WIDER FACE dataset.
 
 ## 📊 Available Models
 
-### ✅ Included Models (Ready to use)
-These lightweight models are statically quantized to INT8 and already included in this repository:
+All four **YOLO26** variants are exported in **FP32** with native **NMS-free** inference (`nms=False` / one-to-one head producing `(1, 300, 6)` tensors of `[x1, y1, x2, y2, confidence, class_id]` or raw one-to-many `(1, 5, 8400)` automatically handled by `YOLO26FaceDetector`):
 
-1. **yolov12n-face.onnx (Nano)**
-   - ⚡ **Fastest** inference speed.
+1. **yolo26n-face.onnx (Nano)**
+   - ⚡ **Fastest** inference speed (DFL-free + NMS-free).
    - 🎯 Best for: **Live Webcam**, low-power devices, real-time CPU processing.
-   - 📉 Accuracy: Good for close-up faces.
+   - 📉 Accuracy: Great for close-up and medium-range faces.
 
-2. **yolov12s-face.onnx (Small)**
+2. **yolo26s-face.onnx (Small)**
    - ⚖️ **Balanced** speed and accuracy.
-   - 🎯 Best for: **Video Processing** where stable FPS is needed.
-   - 📈 Accuracy: Better detection at medium distances.
+   - 🎯 Best for: **Video Processing** where stable high FPS is needed.
+   - 📈 Accuracy: Strong detection at medium distances.
 
-3. **yolov12m-face.onnx (Medium)**
-   - 🎯 Best for: High-precision video analysis, security footage, severely occluded faces.
+3. **yolo26m-face.onnx (Medium)**
+   - 🎯 Best for: High-precision video analysis, security footage, occluded faces.
    - 🐢 Speed: Moderate.
 
-### 📥 Models to Download (Required for higher accuracy)
-Due to file size limits, the heavier INT8 quantized models must be downloaded manually or via script:
-
-4. **yolov12l-face.onnx (Large)**
-   - 🎯 Best for: **Static Images**, difficult lighting, small faces in large crowds.
-   - 🐢 Speed: Slowest but most accurate (SOTA).
+4. **yolo26l-face.onnx (Large)**
+   - 🎯 Best for: **Static Images**, difficult lighting, tiny faces in dense crowds.
+   - 🐢 Speed: Slowest but highest accuracy (SOTA).
 
 ---
 
 ## 📂 Directory Structure & Artifacts
 
-The `models/` directory separates the deployment ONNX weights from the training and evaluation artifacts:
+The `models/` directory organizes the deployment ONNX weights alongside training and evaluation artifacts:
 
 ```text
 models/
-├── yolov12n-face.onnx   # ✅ Included weight (Nano)
-├── yolov12s-face.onnx   # ✅ Included weight (Small)
-├── yolov12m-face.onnx   # ✅ Included weight (Medium)
-├── yolov12l-face.onnx   # 📥 Download needed (Large)
-├── MODELS.md                 # This file
-├── fp32-to-int8-static-quantization-of-yolov12-face.ipynb # Quantization Notebook
+├── yolo26n-face.onnx         # ✅ Nano FP32 ONNX weight (NMS-free)
+├── yolo26s-face.onnx         # ✅ Small FP32 ONNX weight (NMS-free)
+├── yolo26m-face.onnx         # ✅ Medium FP32 ONNX weight (NMS-free)
+├── yolo26l-face.onnx         # ✅ Large FP32 ONNX weight (NMS-free)
+├── MODELS.md                 # This documentation file
 └── training/                 # 🧠 Training Source & Evaluation
-    ├── train_yolov12-face_widerface.ipynb  # Jupyter Notebook for reproducing training
     └── benchmarks/           # 📊 Evaluation metrics and plots
-        ├── combined_results.png
-        ├── combined_F1_curves.png
-        ├── combined_confusion_matrix.png
-        ├── nano/             # Artifacts for Nano variant
-        │   ├── args.yaml     # Hyperparameters configuration
-        │   ├── results.csv   # Epoch-by-epoch training metrics
-        │   └── ...
-        ├── small/            # Artifacts for Small variant
-        ├── medium/           # Artifacts for Medium variant
-        └── large/            # Artifacts for Large variant
-
 ```
-
----
-
-## 🏋️ Training & Quantization
-
-The `models/` directory ensures full transparency and reproducibility:
-
-1. **Training Notebook:** `training/train_yolov12-face_widerface.ipynb` contains the code used to train these models on the WIDER FACE dataset. *(Note: Raw WIDER FACE images are not included due to size limits).*
-
-
-2. **Quantization Notebook:** `fp32-to-int8-static-quantization-of-yolov12-face.ipynb` demonstrates how FP32 PyTorch models were converted into optimized static INT8 ONNX models for fast CPU execution via ONNX Runtime.
-3. **Hyperparameters (`args.yaml`):** Each model's folder inside `benchmarks/` contains the exact configuration used during training.
-
----
-
-## ⬇️ Download Instructions
-
-The models are sourced from the [YapaLab/yolo-face](https://github.com/YapaLab/yolo-face) repository.
-
-### Option 1: Automated Download (Linux/Mac)
-
-Run the following commands in your terminal (inside the project root):
-
-```bash
-# Download Large Model (FP32 PyTorch)
-wget [https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt) -P models/
-
-```
-
-### Option 2: Direct Download (Manual)
-
-Click the links below to download the files and place them directly into the `models/` directory of this project.
-
-| Model | Size | Download Link |
-
-|-------|------|---------------|
-
-| Large | ~53 MB | [yolo12l-face.pt](https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov12l-face.pt) |
 
 ---
 
 ## 🚀 How to Use in the Web App
 
-Once all models are downloaded, you can select them from the FastAPI web interface:
+Place all 4 files (`yolo26n-face.onnx`, `yolo26s-face.onnx`, `yolo26m-face.onnx`, `yolo26l-face.onnx`) inside the `models/` directory, then start the server:
 
-1. Open `http://localhost:7860` in your browser
-
-
-2. Go to the **Image**, **Video**, or **Webcam** tab
+1. Open `http://localhost:7860` in your browser.
+2. Go to the **Image**, **Video**, or **Webcam** tab.
 3. Select your desired model from the dropdown:
-* **Nano (yolov12n)** - Fastest (default)
-* **Small (yolov12s)** - Balanced
-* **Medium (yolov12m)** - High Precision
-* **Large (yolov12l)** - Max Accuracy
-
-
+   * **Nano (`yolo26n`)** - Fastest (default for Webcam)
+   * **Small (`yolo26s`)** - Balanced (default for Video)
+   * **Medium (`yolo26m`)** - High Precision
+   * **Large (`yolo26l`)** - Max Accuracy (default for Image)
 
 ---
 
 ## 📈 Model Comparison
 
-| Model | Suffix | Best Use Case | Inference Speed | Accuracy |
-| --- | --- | --- | --- | --- |
-| Nano | n | Webcam CPU | 🚀 Very Fast | ⭐⭐⭐ |
-| Small | s | Standard Video | 🚀 Fast | ⭐⭐⭐⭐ |
-| Medium | m | Analysis GPU/CPU | 🐢 Moderate | ⭐⭐⭐⭐⭐ |
-| Large | l | High-Res Images | 🐢 Slow | ⭐⭐⭐⭐⭐⭐ |
+| Model | Key | Best Use Case | Precision | Architecture | Inference Speed | Accuracy |
+| --- | --- | --- | --- | --- | --- | --- |
+| Nano | `yolo26n` | Webcam CPU | FP32 | NMS-Free | 🚀 Very Fast | ⭐⭐⭐ |
+| Small | `yolo26s` | Standard Video | FP32 | NMS-Free | 🚀 Fast | ⭐⭐⭐⭐ |
+| Medium | `yolo26m` | Analysis GPU/CPU | FP32 | NMS-Free | 🐢 Moderate | ⭐⭐⭐⭐⭐ |
+| Large | `yolo26l` | High-Res Images | FP32 | NMS-Free | 🐢 Slow | ⭐⭐⭐⭐⭐⭐ |
 
 ---
 
@@ -132,34 +73,15 @@ Once all models are downloaded, you can select them from the FastAPI web interfa
 ### Model Not Found Error
 
 ```text
-FileNotFoundError: Model not found: models/yolov12m-face-int8.onnx
-
+FileNotFoundError: ONNX model not found at: models/yolo26n-face.onnx
 ```
 
-**Solution:** Download the model using one of the methods above.
-
-### Download Too Slow
-
-**Solution:**
-
-* Use a VPN or check your network connection.
-* Try downloading during off-peak hours or use Option 2 (manual download).
-
-### Not Enough Disk Space
-
-**Solution:**
-
-* Ensure you have at least 500 MB of free space.
-* Download one model at a time.
+**Solution:** Ensure `yolo26n-face.onnx`, `yolo26s-face.onnx`, `yolo26m-face.onnx`, and `yolo26l-face.onnx` are placed directly inside the `models/` folder.
 
 ---
 
 ## References
 
-* [YOLOv12 GitHub Repository](https://github.com/YapaLab/yolo-face)
+* [Ultralytics YOLO26 Documentation](https://docs.ultralytics.com/models/yolo26/)
+* [YOLO26 End-to-End NMS-Free Detection](https://docs.ultralytics.com/guides/end2end-detection/)
 * [ONNX Runtime Documentation](https://onnxruntime.ai/docs/)
-* [Ultralytics YOLOv12](https://docs.ultralytics.com/)
-
----
-
-**Note:** The models in this project use static INT8 quantization and run on ONNX Runtime for optimal cross-platform asynchronous performance under FastAPI.

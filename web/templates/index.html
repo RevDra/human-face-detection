@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="google-site-verification" content="aJ5xFmUacyJe-FOhiU28zGS9lJ3vr38zz4YPOX843V8" />
-    <title>YOLOv12 Face Detection - Web</title>
+    <title>YOLO26 Face Detection - Web</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; transition: background 0.3s ease; }
@@ -208,8 +208,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔍 YOLOv12 Face Detection</h1>
-            <p>Next-Gen face detection with Attention Mechanism</p>
+            <h1>🔍 YOLO26 Face Detection</h1>
+            <p>Next-Gen End-to-End NMS-Free Face Detection</p>
             <div class="theme-toggle">
                 <button class="tab-button" onclick="toggleDarkMode()" id="darkModeBtn">🌙 Dark Mode</button>
             </div>
@@ -471,40 +471,40 @@
         <!-- TAB INFO -->
         <div id="info" class="tab-content">
             <div class="card">
-                <h2>About YOLOv12 Models</h2>
+                <h2>About YOLO26 Models</h2>
                 
                 <div class="detection-stats">
                     <h3 style="color: #667eea; margin-bottom: 15px;">📊 Model Comparison</h3>
                     <div class="stat-row">
-                        <span class="stat-label"><strong>YOLOv12 Nano (n)</strong></span>
+                        <span class="stat-label"><strong>YOLO26 Nano (n)</strong></span>
                         <span>Fastest (Real-time) - Best for Webcam</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label"><strong>YOLOv12 Small (s)</strong></span>
+                        <span class="stat-label"><strong>YOLO26 Small (s)</strong></span>
                         <span>Balanced - Good for Video</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label"><strong>YOLOv12 Medium (m)</strong></span>
+                        <span class="stat-label"><strong>YOLO26 Medium (m)</strong></span>
                         <span>High Accuracy - For Analysis</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label"><strong>YOLOv12 Large (l)</strong></span>
+                        <span class="stat-label"><strong>YOLO26 Large (l)</strong></span>
                         <span>Max Accuracy - For Static Images</span>
                     </div>
                 </div>
 
-                <h3 style="color: #667eea; margin-top: 30px; margin-bottom: 15px;">💡 What's new in v12?</h3>
+                <h3 style="color: #667eea; margin-top: 30px; margin-bottom: 15px;">💡 What's new in YOLO26?</h3>
                 <ul style="line-height: 2; color: #666;">
-                    <li>✅ <strong>Attention Mechanism:</strong> Better at detecting small/occluded faces</li>
-                    <li>✅ <strong>Zero-Shot Generalization:</strong> Works well in diverse lighting</li>
-                    <li>✅ <strong>Optimized Architecture:</strong> Higher accuracy at same speed as v8</li>
+                    <li>✅ <strong>End-to-End NMS-Free Inference:</strong> One-to-one prediction head eliminates NMS post-processing overhead</li>
+                    <li>✅ <strong>DFL-Free Architecture:</strong> Direct bounding box regression for faster CPU & edge execution</li>
+                    <li>✅ <strong>ProgLoss & STAL:</strong> Superior accuracy on small, distant, and occluded faces</li>
                 </ul>
             </div>
         </div>
 
         <div class="footer text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
             <p class="mb-1 text-white-50">
-                🚀 YOLOv12 Face Detection Web - Version 2.0.0 | Powered by <strong class="text-white">FastAPI</strong> & <strong class="text-white">Ultralytics</strong>
+                🚀 YOLO26 Face Detection Web - Version 3.0.0 | Powered by <strong class="text-white">FastAPI</strong> & <strong class="text-white">Ultralytics</strong>
             </p>
             <p class="mb-0 small text-muted">
                 2026 &copy; Developed by <a href="mailto:luongminhngoc0@gmail.com">Ngoc M. Luong</a> with ❤️
@@ -1117,8 +1117,8 @@
                     setProgressValue(progressBar, progressPercent, 0, true);
                     progressBar.classList.add('progress-bar-animated');
                     progressStatus.textContent = blur
-                        ? '🕵️ Phase 2/2: Blurring faces with YOLOv12...'
-                        : '🔍 Phase 2/2: Running YOLOv12 face inference...';
+                        ? '🕵️ Phase 2/2: Blurring faces with YOLO26...'
+                        : '🔍 Phase 2/2: Running YOLO26 face inference...';
 
                     if (metaLeft) metaLeft.textContent = 'Stage: AI Inference';
                     if (metaMid) metaMid.textContent = `Model: ${model}`;

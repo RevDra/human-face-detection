@@ -1,4 +1,4 @@
-# 📋 YOLOv12 Face Detection - Project Overview & Guide (v2.0.0)
+# 📋 YOLO26 Face Detection - Project Overview & Guide (v3.0.0)
 
 ## 🎯 Quick Reference
 
@@ -16,7 +16,7 @@
 ### Core Application Files (Required)
 
 * `src/web_app.py`: Main FastAPI server (Port 7860), optimized for async ASGI and real-time SSE.
-* `src/face_detector.py`: Optimized YOLOv12 logic core (OpenCV + ONNX Runtime + NumPy vectorized interpolation).
+* `src/face_detector.py`: Optimized YOLO26 logic core (OpenCV + ONNX Runtime + NumPy vectorized interpolation).
 * `web/templates/index.html`: Responsive UI with adaptive webcam pacing and in-place smoothing.
 
 ### Deployment Files
@@ -28,12 +28,12 @@
 * `.github/workflows/docker-publish.yml`: CI/CD for auto-building Docker images.
 * `.github/workflows/release.yml`: Automated Semantic Release CI/CD.
 
-### Models (YOLOv12 INT8 ONNX)
+### Models (YOLO26 FP32 NMS-Free ONNX)
 
-* `models/yolov12n-face.onnx`: Nano (Best for Webcam/CPU).
-* `models/yolov12s-face.onnx`: Small (Balanced).
-* `models/yolov12m-face.onnx`: Medium (Best for Video).
-* `models/yolov12l-face.onnx`: Large (Best for Static Images).
+* `models/yolo26n-face.onnx`: Nano (Best for Webcam/CPU).
+* `models/yolo26s-face.onnx`: Small (Balanced).
+* `models/yolo26m-face.onnx`: Medium (Best for Video).
+* `models/yolo26l-face.onnx`: Large (Best for Static Images).
 
 ### Documentation Files
 
@@ -79,18 +79,18 @@ Human_face_detection/
 ├── 🌐 SOURCE CODE
 │   └── src/
 │       ├── web_app.py                    ⭐ Main FastAPI server (Port 7860)
-│       └── face_detector.py              ⭐ YOLOv12 Detection Engine (ONNX + OpenCV)
+│       └── face_detector.py              ⭐ YOLO26 Detection Engine (ONNX + OpenCV)
 │
 ├── 🎨 FRONTEND
 │   └── web/templates/
 │       └── index.html                    ⭐ Web UI (Adaptive Webcam Pacing)
 │
-├── 🧠 MODELS (YOLOv12 INT8 ONNX)
+├── 🧠 MODELS (YOLO26 FP32 NMS-Free ONNX)
 │   └── models/
-│       ├── yolov12n-face.onnx       Nano model (Best for Webcam)
-│       ├── yolov12s-face.onnx       Small model
-│       ├── yolov12m-face.onnx       Medium model
-│       └── yolov12l-face.onnx       Large model
+│       ├── yolo26n-face.onnx       Nano model (Best for Webcam)
+│       ├── yolo26s-face.onnx       Small model
+│       ├── yolo26m-face.onnx       Medium model
+│       └── yolo26l-face.onnx       Large model
 │
 ├── 📚 DOCUMENTATION & META
 │   ├── README.md                         Main documentation
@@ -208,13 +208,13 @@ docker-compose -f config/docker-compose.yml up --build
 | POST | /api/detect-image | Upload image & get detection result (Base64/JSON) |
 | POST | /api/detect-video | Upload video in O(1) chunks & start async job |
 | GET | /api/video-stream/{job_id} | Real-time Server-Sent Events (SSE) progress stream |
-| GET | /api/models | Get list of available YOLOv12 models |
+| GET | /api/models | Get list of available YOLO26 models |
 | GET | /api/health | Server status check |
 | GET | /outputs/{filename} | Download or stream processed video files (Range Requests supported) |
 
 ---
 
-## 📊 Performance & Architecture Improvements (v2.0.0)
+## 📊 Performance & Architecture Improvements (v3.0.0)
 
 * **Asynchronous ASGI Performance:** Migrated from synchronous WSGI Flask to non-blocking FastAPI and Uvicorn.
 * **Vectorized Interpolation:** Optimized `face_detector.py` using NumPy vectorization and motion-gated logic.
@@ -225,6 +225,6 @@ docker-compose -f config/docker-compose.yml up --build
 
 **Created:** January 31, 2026
 
-**Updated:** June 2026 (v2.0.0 FastAPI Architecture Release)
+**Updated:** June 2026 (v3.0.0 FastAPI Architecture Release)
 
 **Status:** Production Ready ✅

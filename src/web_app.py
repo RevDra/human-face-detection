@@ -1,5 +1,5 @@
 """
-FastAPI Web Application for YOLOv12 Human Face Detection.
+FastAPI Web Application for YOLO26 Human Face Detection.
 Provides REST APIs and Web UI for image, video, and webcam detection
 with 100% backward compatibility with the existing frontend.
 """
@@ -30,7 +30,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from werkzeug.utils import secure_filename
 
-from .face_detector import YOLOv12FaceDetector
+from .face_detector import YOLO26FaceDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,8 +68,8 @@ _last_cleanup_ts: float = 0.0
 _cleanup_lock = threading.Lock()
 
 app = FastAPI(
-    title="YOLOv12 Human Face Detection API",
-    version="1.9.1",
+    title="YOLO26 Human Face Detection API",
+    version="3.0.0",
 )
 
 if STATIC_FOLDER.exists():
@@ -78,14 +78,21 @@ if STATIC_FOLDER.exists():
 templates = Jinja2Templates(directory=str(TEMPLATE_FOLDER))
 
 AVAILABLE_MODELS = {
-    "yolov12n": "models/yolov12n-face.onnx",
-    "yolov12s": "models/yolov12s-face.onnx",
-    "yolov12m": "models/yolov12m-face.onnx",
-    "yolov12l": "models/yolov12l-face.onnx",
+    "yolo26n": "models/yolo26n-face.onnx",
+    "yolo26s": "models/yolo26s-face.onnx",
+    "yolo26m": "models/yolo26m-face.onnx",
+    "yolo26l": "models/yolo26l-face.onnx",
+}
+
+LEGACY_MODEL_ALIASES = {
+    "yolov12n": "yolo26n",
+    "yolov12s": "yolo26s",
+    "yolov12m": "yolo26m",
+    "yolov12l": "yolo26l",
 }
 
 MAX_LOADED_MODELS = int(os.environ.get("MAX_LOADED_MODELS", 2))
-detectors: "OrderedDict[str, YOLOv12FaceDetector]" = OrderedDict()
+detectors: "OrderedDict[str, YOLO26FaceDetector]" = OrderedDict()
 detectors_lock = threading.Lock()
 
 video_jobs: dict[str, dict[str, Any]] = {}
@@ -155,7 +162,7 @@ def _format_detections(
     Serialize raw detector outputs into standardized JSON-ready dictionaries.
 
     Args:
-        detections: List of detection dicts from YOLOv12FaceDetector.
+        detections: List of detection dicts from YOLO26FaceDetector.
         scale_percent: Multiply confidence by 100 and round to 2 decimals if True.
         include_xy2: Include x2 and y2 keys in each item if True.
 
@@ -265,19 +272,20 @@ def _parse_bool(raw_val: Any) -> bool:
     return str(raw_val).strip().lower() in ("true", "1", "yes", "on")
 
 
-def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> YOLOv12FaceDetector:
+def get_detector(conf_threshold: float = 0.32, model_key: str = "yolo26n") -> YOLO26FaceDetector:
     """
-    Get or initialize a YOLOv12FaceDetector instance with LRU memory eviction.
+    Get or initialize a YOLO26FaceDetector instance with LRU memory eviction.
 
     Args:
         conf_threshold: Default confidence threshold when initializing a new model.
         model_key: Model identifier key in AVAILABLE_MODELS.
 
     Returns:
-        Cached or newly loaded YOLOv12FaceDetector instance.
+        Cached or newly loaded YOLO26FaceDetector instance.
     """
+    model_key = LEGACY_MODEL_ALIASES.get(model_key, model_key)
     if model_key not in AVAILABLE_MODELS:
-        model_key = "yolov12n"
+        model_key = "yolo26n"
 
     with detectors_lock:
         if model_key in detectors:
@@ -291,7 +299,7 @@ def get_detector(conf_threshold: float = 0.32, model_key: str = "yolov12n") -> Y
 
         model_path = AVAILABLE_MODELS[model_key]
         logger.info("Loading model '%s' from %s...", model_key, model_path)
-        detector = YOLOv12FaceDetector(model_path=model_path, conf_threshold=conf_threshold)
+        detector = YOLO26FaceDetector(model_path=model_path, conf_threshold=conf_threshold)
         detectors[model_key] = detector
         return detector
 
@@ -304,26 +312,26 @@ async def index(request: Request) -> HTMLResponse:
 
 @app.get("/api/models")
 async def get_models() -> JSONResponse:
-    """Return available YOLOv12 face detection models for frontend selectors."""
+    """Return available YOLO26 face detection models for frontend selectors."""
     models_info = {
         "nano": {
-            "name": "yolov12n",
-            "label": "YOLOv12 Nano (Fastest - Realtime)",
+            "name": "yolo26n",
+            "label": "YOLO26 Nano (Fastest - Realtime)",
             "description": "Optimized for speed, ideal for webcam.",
         },
         "small": {
-            "name": "yolov12s",
-            "label": "YOLOv12 Small (Balanced)",
+            "name": "yolo26s",
+            "label": "YOLO26 Small (Balanced)",
             "description": "Good balance between speed and accuracy.",
         },
         "medium": {
-            "name": "yolov12m",
-            "label": "YOLOv12 Medium (High Accuracy)",
+            "name": "yolo26m",
+            "label": "YOLO26 Medium (High Accuracy)",
             "description": "Higher precision for video analysis.",
         },
         "large": {
-            "name": "yolov12l",
-            "label": "YOLOv12 Large (Max Accuracy)",
+            "name": "yolo26l",
+            "label": "YOLO26 Large (Max Accuracy)",
             "description": "Maximum precision for static images.",
         },
     }
@@ -388,7 +396,7 @@ async def detect_image(
     image: UploadFile | None = File(default=None),
     confidence: str = Form(default="0.5"),
     blur_faces: str = Form(default="false"),
-    model: str = Form(default="yolov12n"),
+    model: str = Form(default="yolo26n"),
     return_mode: str = Form(default="base64"),
 ) -> JSONResponse:
     """Detect faces in an uploaded image and return coordinates or Base64 results."""
@@ -501,7 +509,7 @@ async def detect_video(
     video: UploadFile | None = File(default=None),
     confidence: str = Form(default="0.5"),
     blur_faces: str = Form(default="false"),
-    model: str = Form(default="yolov12n"),
+    model: str = Form(default="yolo26n"),
 ) -> JSONResponse:
     """Upload a video in O(1) memory chunks and start asynchronous face detection job."""
     input_path_obj: Path | None = None
@@ -669,13 +677,13 @@ async def detect_webcam_frame(request: Request) -> JSONResponse:
     try:
         content_type = request.headers.get("content-type", "")
         conf_threshold = 0.32
-        model_key = "yolov12n"
+        model_key = "yolo26n"
         raw_bytes: bytes = b""
 
         if "application/json" in content_type:
             data = await request.json()
             conf_threshold = _parse_confidence(data.get("confidence", 0.32), 0.32)
-            model_key = str(data.get("model", "yolov12n"))
+            model_key = str(data.get("model", "yolo26n"))
             frame_b64 = str(data.get("frame", ""))
             if "," in frame_b64:
                 frame_b64 = frame_b64.split(",", 1)[1]
@@ -684,7 +692,7 @@ async def detect_webcam_frame(request: Request) -> JSONResponse:
         else:
             form = await request.form()
             conf_threshold = _parse_confidence(form.get("confidence", 0.32), 0.32)
-            model_key = str(form.get("model", "yolov12n"))
+            model_key = str(form.get("model", "yolo26n"))
             upload_obj = form.get("file") or form.get("frame")
             if upload_obj is not None and hasattr(upload_obj, "read"):
                 raw_bytes = await upload_obj.read(MAX_WEBCAM_SIZE_BYTES + 1)

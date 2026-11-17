@@ -1,6 +1,7 @@
 """
-Human Face Detection using YOLOv12 (ONNX Runtime)
-Supports image, video, and real-time webcam detection
+Human Face Detection using YOLO26 (ONNX Runtime)
+Supports image, video, and real-time webcam detection with native NMS-free end-to-end decoding
+and backward-compatible one-to-many NMS fallback.
 """
 
 import argparse
@@ -21,23 +22,23 @@ DetectionDict = Dict[str, Any]
 ProgressCallback = Callable[[int, int], None]
 
 
-class YOLOv12FaceDetector:
-    """Face detector using ONNX Runtime with YOLOv12 model."""
+class YOLO26FaceDetector:
+    """Face detector using ONNX Runtime with YOLO26 model."""
 
     def __init__(
         self,
-        model_path: str = "models/yolov12n-face.onnx",
+        model_path: str = "models/yolo26n-face.onnx",
         conf_threshold: float = 0.32,
         iou_threshold: float = 0.45,
         input_size: Tuple[int, int] = (640, 640),
     ):
         """
-        Initialize the YOLOv12 Face Detector.
+        Initialize the YOLO26 Face Detector.
 
         Args:
             model_path: Path to the ONNX model file
             conf_threshold: Confidence threshold for detections
-            iou_threshold: IoU threshold for NMS
+            iou_threshold: IoU threshold for fallback NMS (unused in native NMS-free mode)
             input_size: Model input resolution (width, height)
         """
         self.conf_threshold = conf_threshold
@@ -118,7 +119,7 @@ class YOLOv12FaceDetector:
 
     def preprocess(self, image: np.ndarray) -> Tuple[np.ndarray, float, Tuple[int, int]]:
         """
-        Preprocess image for YOLOv12 inference using ROI-only letterbox normalization.
+        Preprocess image for YOLO26 inference using ROI-only letterbox normalization.
 
         Args:
             image: Input BGR image (H, W, C).
@@ -158,36 +159,87 @@ class YOLOv12FaceDetector:
 
         return blob_buffer, scale, (pad_w, pad_h)
 
-    def postprocess(
-        self,
-        outputs: List[np.ndarray],
+    @staticmethod
+    def _scale_boxes_to_dicts(
+        x1: np.ndarray,
+        y1: np.ndarray,
+        x2: np.ndarray,
+        y2: np.ndarray,
+        scores: np.ndarray,
         orig_shape: Tuple[int, int],
         scale: float,
         pad: Tuple[int, int],
-        conf_threshold: Optional[float] = None,
+    ) -> List[DetectionDict]:
+        """Scale letterbox coordinates back to original image space and format dicts."""
+        pad_w, pad_h = pad
+        orig_h, orig_w = orig_shape
+        inv_scale = 1.0 / scale
+
+        cx1 = np.clip((x1 - pad_w) * inv_scale, 0, orig_w)
+        cy1 = np.clip((y1 - pad_h) * inv_scale, 0, orig_h)
+        cx2 = np.clip((x2 - pad_w) * inv_scale, 0, orig_w)
+        cy2 = np.clip((y2 - pad_h) * inv_scale, 0, orig_h)
+
+        ix1 = np.rint(cx1).astype(int)
+        iy1 = np.rint(cy1).astype(int)
+        ix2 = np.rint(cx2).astype(int)
+        iy2 = np.rint(cy2).astype(int)
+
+        return [
+            {
+                "x1": int(ix1[i]),
+                "y1": int(iy1[i]),
+                "x2": int(ix2[i]),
+                "y2": int(iy2[i]),
+                "w": max(1, int(ix2[i] - ix1[i])),
+                "h": max(1, int(iy2[i] - iy1[i])),
+                "confidence": float(scores[i]),
+            }
+            for i in range(len(scores))
+        ]
+
+    def _decode_end2end(
+        self,
+        predictions: np.ndarray,
+        orig_shape: Tuple[int, int],
+        scale: float,
+        pad: Tuple[int, int],
+        thresh: float,
     ) -> List[DetectionDict]:
         """
-        Postprocess YOLOv12 outputs to extract face bounding boxes.
-
-        Args:
-            outputs: Raw model outputs
-            orig_shape: Original image (height, width)
-            scale: Letterbox scale factor
-            pad: Letterbox (pad_w, pad_h)
-            conf_threshold: Optional confidence override for thread-safe calls
-
-        Returns:
-            List of detection dictionaries with keys: x1, y1, x2, y2, w, h, confidence
+        Decode YOLO26 native NMS-free one-to-one output of shape (N_det, 6):
+        [x1, y1, x2, y2, confidence, class_id].
         """
-        thresh = self.conf_threshold if conf_threshold is None else float(conf_threshold)
-        predictions = np.squeeze(outputs[0])
-
-        if predictions.ndim == 2 and predictions.shape[0] < predictions.shape[1]:
-            predictions = predictions.T
-        if predictions.ndim != 2 or predictions.shape[1] < 5:
+        scores = predictions[:, 4]
+        mask = scores >= thresh
+        if not np.any(mask):
             return []
 
-        scores = predictions[:, 4]
+        filtered = predictions[mask]
+        return self._scale_boxes_to_dicts(
+            filtered[:, 0],
+            filtered[:, 1],
+            filtered[:, 2],
+            filtered[:, 3],
+            filtered[:, 4],
+            orig_shape,
+            scale,
+            pad,
+        )
+
+    def _decode_raw_nms(
+        self,
+        predictions: np.ndarray,
+        orig_shape: Tuple[int, int],
+        scale: float,
+        pad: Tuple[int, int],
+        thresh: float,
+    ) -> List[DetectionDict]:
+        """
+        Decode raw one-to-many YOLO output of shape (N_anchors, 4 + nc):
+        [cx, cy, w, h, conf, ...] with OpenCV NMSBoxes.
+        """
+        scores = predictions[:, 4] if predictions.shape[1] == 5 else predictions[:, 4:].max(axis=1)
         mask = scores >= thresh
         if not np.any(mask):
             return []
@@ -206,39 +258,58 @@ class YOLOv12FaceDetector:
             return []
 
         flat_idx = indices.flatten() if isinstance(indices, np.ndarray) else np.asarray(indices)
-
-        pad_w, pad_h = pad
-        orig_h, orig_w = orig_shape
-        inv_scale = 1.0 / scale
-
         sel_x = x[flat_idx]
         sel_y = y[flat_idx]
-        sel_w = w[flat_idx]
-        sel_h = h[flat_idx]
-        sel_scores = filtered_scores[flat_idx]
+        return self._scale_boxes_to_dicts(
+            sel_x,
+            sel_y,
+            sel_x + w[flat_idx],
+            sel_y + h[flat_idx],
+            filtered_scores[flat_idx],
+            orig_shape,
+            scale,
+            pad,
+        )
 
-        x1 = np.clip((sel_x - pad_w) * inv_scale, 0, orig_w)
-        y1 = np.clip((sel_y - pad_h) * inv_scale, 0, orig_h)
-        x2 = np.clip((sel_x + sel_w - pad_w) * inv_scale, 0, orig_w)
-        y2 = np.clip((sel_y + sel_h - pad_h) * inv_scale, 0, orig_h)
+    def postprocess(
+        self,
+        outputs: List[np.ndarray],
+        orig_shape: Tuple[int, int],
+        scale: float,
+        pad: Tuple[int, int],
+        conf_threshold: Optional[float] = None,
+    ) -> List[DetectionDict]:
+        """
+        Postprocess YOLO26 outputs to extract face bounding boxes.
+        Automatically dispatches between native NMS-free one-to-one outputs (1, 300, 6)
+        and raw one-to-many outputs (1, 5, 8400).
 
-        ix1 = np.rint(x1).astype(int)
-        iy1 = np.rint(y1).astype(int)
-        ix2 = np.rint(x2).astype(int)
-        iy2 = np.rint(y2).astype(int)
+        Args:
+            outputs: Raw model outputs
+            orig_shape: Original image (height, width)
+            scale: Letterbox scale factor
+            pad: Letterbox (pad_w, pad_h)
+            conf_threshold: Optional confidence override for thread-safe calls
 
-        return [
-            {
-                "x1": int(ix1[i]),
-                "y1": int(iy1[i]),
-                "x2": int(ix2[i]),
-                "y2": int(iy2[i]),
-                "w": max(1, int(ix2[i] - ix1[i])),
-                "h": max(1, int(iy2[i] - iy1[i])),
-                "confidence": float(sel_scores[i]),
-            }
-            for i in range(len(flat_idx))
-        ]
+        Returns:
+            List of detection dictionaries with keys: x1, y1, x2, y2, w, h, confidence
+        """
+        thresh = self.conf_threshold if conf_threshold is None else float(conf_threshold)
+        predictions = np.squeeze(outputs[0])
+
+        if predictions.ndim == 1:
+            predictions = predictions[None, :]
+        elif predictions.ndim == 2 and predictions.shape[0] < predictions.shape[1]:
+            if predictions.shape[0] <= 64 and predictions.shape[1] > 64:
+                predictions = predictions.T
+
+        if predictions.ndim != 2 or predictions.shape[1] < 5:
+            return []
+
+        if predictions.shape[1] == 6 and predictions.shape[0] <= 1000:
+            return self._decode_end2end(predictions, orig_shape, scale, pad, thresh)
+
+        return self._decode_raw_nms(predictions, orig_shape, scale, pad, thresh)
 
     def detect_faces(self, image: np.ndarray, conf_threshold: Optional[float] = None) -> List[Dict]:
         """
@@ -395,7 +466,7 @@ class YOLOv12FaceDetector:
             next_dets: Detections from the current/next keyframe.
 
         Returns:
-            Tuple of (base_boxes, delta_boxes, unmatched_fallbacks) or None if no interpolation needed.
+            Tuple of (base_boxes, delta_boxes, unmatched_fallbacks) or None.
         """
         if not next_dets or not prev_dets:
             return None
@@ -503,10 +574,10 @@ class YOLOv12FaceDetector:
         if alpha <= 0.0:
             return prev_dets
 
-        plan = YOLOv12FaceDetector._prepare_interpolation_plan(prev_dets, next_dets)
+        plan = YOLO26FaceDetector._prepare_interpolation_plan(prev_dets, next_dets)
         if plan is None:
             return next_dets
-        return YOLOv12FaceDetector._evaluate_interpolation_plan(plan, alpha)
+        return YOLO26FaceDetector._evaluate_interpolation_plan(plan, alpha)
 
     def detect_from_video(
         self,
@@ -658,7 +729,6 @@ class YOLOv12FaceDetector:
         start_time = time.time()
 
         prev_dets: Optional[List[Dict]] = None
-        prev_thumb: Optional[np.ndarray] = None
         skipped_chunks = 0
         max_skip_chunks = 3
 
@@ -739,7 +809,7 @@ class YOLOv12FaceDetector:
                         max_faces = num_faces
 
                     if show_preview:
-                        cv2.imshow("YOLOv12 Face Detection - Video", frm)
+                        cv2.imshow("YOLO26 Face Detection - Video", frm)
                         if cv2.waitKey(1) & 0xFF == ord("q"):
                             stop_event.set()
                             break
@@ -836,7 +906,7 @@ class YOLOv12FaceDetector:
                     2,
                 )
 
-                cv2.imshow("YOLOv12 Real-time Face Detection", frame)
+                cv2.imshow("YOLO26 Real-time Face Detection", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
         finally:
@@ -844,9 +914,13 @@ class YOLOv12FaceDetector:
             cv2.destroyAllWindows()
 
 
+# Backward compatibility alias
+YOLOv12FaceDetector = YOLO26FaceDetector
+
+
 def main():
     """CLI Entry point."""
-    parser = argparse.ArgumentParser(description="Human Face Detection using YOLOv12 ONNX")
+    parser = argparse.ArgumentParser(description="Human Face Detection using YOLO26 ONNX")
     parser.add_argument(
         "--mode",
         type=str,
@@ -860,11 +934,16 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="models/yolov12n-face.onnx",
+        default="models/yolo26n-face.onnx",
         help="Path to ONNX model",
     )
     parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
-    parser.add_argument("--iou", type=float, default=0.45, help="IoU threshold for NMS")
+    parser.add_argument(
+        "--iou",
+        type=float,
+        default=0.45,
+        help="IoU threshold for fallback NMS (unused for native NMS-free YOLO26)",
+    )
     parser.add_argument(
         "--no-preview",
         action="store_true",
@@ -878,7 +957,7 @@ def main():
 
     args = parser.parse_args()
 
-    detector = YOLOv12FaceDetector(
+    detector = YOLO26FaceDetector(
         model_path=args.model,
         conf_threshold=args.conf,
         iou_threshold=args.iou,
@@ -900,7 +979,7 @@ def main():
             print(f"Saved output image to: {args.output}")
 
         if not args.no_preview:
-            cv2.imshow("YOLOv12 Face Detection", output_img)
+            cv2.imshow("YOLO26 Face Detection", output_img)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
