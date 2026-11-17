@@ -3,12 +3,12 @@
 cd "$(dirname "$0")/.."
 echo "[INFO] Working Directory set to: $(pwd)"
 # ----------------------------------
-# YOLOv12 Face Detection - Production Deployment Script
+# YOLO26 Face Detection - Production Deployment Script
 # Usage: bash deploy.sh [start|stop|restart|status|logs|deploy]
 
 set -e
 
-APP_NAME="face-detection-yolov12"
+APP_NAME="face-detection-yolo26"
 APP_USER="facedetection"
 APP_HOME="/opt/face-detection"
 LOG_DIR="/var/log/face-detection"
@@ -87,9 +87,9 @@ setup_app() {
 
 # Check and setup models
 check_models() {
-    echo_info "Checking YOLOv12 models..."
+    echo_info "Checking YOLO26 models..."
     MISSING=0
-    MODELS=("yolov12n-face.pt" "yolov12s-face.pt" "yolov12m-face.pt" "yolov12l-face.pt")
+    MODELS=("yolo26n-face.onnx" "yolo26s-face.onnx" "yolo26m-face.onnx" "yolo26l-face.onnx")
     
     for model in "${MODELS[@]}"; do
         if [ ! -f "$APP_HOME/models/$model" ]; then
@@ -105,7 +105,7 @@ check_models() {
     done
     
     if [ $MISSING -eq 1 ]; then
-        echo_warning "Some YOLOv12 models are missing in $APP_HOME/models/"
+        echo_warning "Some YOLO26 models are missing in $APP_HOME/models/"
     fi
     
     chown -R $APP_USER:$APP_USER "$APP_HOME/models"
@@ -246,7 +246,7 @@ show_logs() {
 
 # Full deployment
 full_deploy() {
-    echo_info "Starting full deployment (YOLOv12 Production)..."
+    echo_info "Starting full deployment (YOLO26 Production)..."
     check_root
     install_deps
     setup_app
@@ -266,7 +266,7 @@ full_deploy() {
     echo_info "Deployment completed successfully!"
     echo ""
     echo "=========================================="
-    echo "YOLOv12 Face Detection Deployed!"
+    echo "YOLO26 Face Detection Deployed!"
     echo "=========================================="
     echo "Public URL: http://localhost (Port 80 -> $PORT)"
     echo "Logs: tail -f $LOG_DIR/gunicorn.log"
